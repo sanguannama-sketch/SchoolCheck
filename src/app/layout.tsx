@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import Sidebar from '@/components/layout/Sidebar';
 import Header from '@/components/layout/Header';
@@ -6,6 +6,12 @@ import Header from '@/components/layout/Header';
 export const metadata: Metadata = {
   title: 'SchoolCheck Dashboard',
   description: 'A beautiful dashboard for SchoolCheck',
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
 };
 
 export default function RootLayout({
