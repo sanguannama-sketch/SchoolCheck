@@ -33,20 +33,33 @@ export default function CheckinPage() {
   const [students, setStudents] = useState<Student[]>(initialStudents);
   const [classFilter, setClassFilter] = useState('ม.1/1');
   const [isScanActive, setIsScanActive] = useState(false);
+  const [allowedDistance, setAllowedDistance] = useState<number>(100);
+  const [isGettingLocation, setIsGettingLocation] = useState(false);
 
   // Sync scan state based on selected class
   useEffect(() => {
-    const savedRoom = localStorage.getItem('activeScanRoom');
-    if (savedRoom === classFilter) {
-      setIsScanActive(true);
-    } else {
-      setIsScanActive(false);
-    }
+    const checkState = () => {
+      try {
+        const savedRoomsStr = localStorage.getItem('activeScanRooms');
+        if (savedRoomsStr) {
+          const rooms = JSON.parse(savedRoomsStr);
+          setIsScanActive(rooms.some((r: any) => (r.room || r) === classFilter));
+        } else {
+          // Check legacy single-room
+          const legacyRoom = localStorage.getItem('activeScanRoom');
+          setIsScanActive(legacyRoom === classFilter);
+        }
+      } catch (e) {
+        setIsScanActive(false);
+      }
+    };
+    
+    checkState();
     
     // Listen to changes (cross-tab)
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'activeScanRoom') {
-        setIsScanActive(e.newValue === classFilter);
+      if (e.key === 'activeScanRooms' || e.key === 'activeScanRoom') {
+        checkState();
       }
     };
     window.addEventListener('storage', handleStorageChange);
@@ -54,12 +67,57 @@ export default function CheckinPage() {
   }, [classFilter]);
 
   const toggleScan = () => {
+    let currentRooms: any[] = [];
+    try {
+      const savedStr = localStorage.getItem('activeScanRooms');
+      if (savedStr) {
+        currentRooms = JSON.parse(savedStr);
+      } else {
+        const legacyRoom = localStorage.getItem('activeScanRoom');
+        if (legacyRoom) currentRooms = [{ room: legacyRoom, lat: 0, lng: 0, radius: 0 }];
+      }
+    } catch (e) { }
+
     if (isScanActive) {
-      localStorage.removeItem('activeScanRoom');
+      // Remove room
+      currentRooms = currentRooms.filter(r => (r.room || r) !== classFilter);
       setIsScanActive(false);
+      
+      if (currentRooms.length > 0) {
+        localStorage.setItem('activeScanRooms', JSON.stringify(currentRooms));
+      } else {
+        localStorage.removeItem('activeScanRooms');
+        localStorage.removeItem('activeScanRoom'); // Clear legacy just in case
+      }
     } else {
-      localStorage.setItem('activeScanRoom', classFilter);
-      setIsScanActive(true);
+      // Add room - requires GPS
+      if (!navigator.geolocation) {
+        alert("เบราว์เซอร์ของคุณไม่รองรับ GPS");
+        return;
+      }
+      setIsGettingLocation(true);
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          setIsGettingLocation(false);
+          
+          if (!currentRooms.some(r => (r.room || r) === classFilter)) {
+            currentRooms.push({ 
+              room: classFilter, 
+              lat: latitude, 
+              lng: longitude, 
+              radius: allowedDistance 
+            });
+          }
+          setIsScanActive(true);
+          localStorage.setItem('activeScanRooms', JSON.stringify(currentRooms));
+        },
+        (error) => {
+          setIsGettingLocation(false);
+          alert("ไม่สามารถเข้าถึงตำแหน่งที่ตั้งได้ กรุณาอนุญาตให้ระบบเข้าถึง GPS เพื่อตั้งค่าจุดสแกน");
+        },
+        { enableHighAccuracy: true }
+      );
     }
   };
   const [date, setDate] = useState(() => {
@@ -155,18 +213,35 @@ export default function CheckinPage() {
 
         </div>
         
-        <div style={{ display: 'flex' }}>
+        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span style={{ fontWeight: 500, color: 'var(--text-main)', fontSize: '0.9rem' }}>ระยะ (ม.):</span>
+            <input 
+              type="number" 
+              style={{ width: '80px', padding: '0.6rem', borderRadius: '10px', border: '1px solid rgba(0,0,0,0.1)', background: 'rgba(255,255,255,0.7)', outline: 'none', fontFamily: 'inherit', color: 'var(--text-main)', fontWeight: 500 }} 
+              value={allowedDistance} 
+              onChange={(e) => setAllowedDistance(Number(e.target.value))}
+              min={10}
+              disabled={isScanActive}
+            />
+          </div>
+
           <button 
             onClick={toggleScan}
+            disabled={isGettingLocation}
             style={{ 
-              display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.6rem 1rem', borderRadius: '10px', fontWeight: 600, fontSize: '0.9rem', cursor: 'pointer', transition: 'all 0.2s', border: 'none',
+              display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.6rem 1rem', borderRadius: '10px', fontWeight: 600, fontSize: '0.9rem', cursor: isGettingLocation ? 'wait' : 'pointer', transition: 'all 0.2s', border: 'none',
               background: isScanActive ? 'var(--text-main)' : 'rgba(255,255,255,0.8)', 
               color: isScanActive ? 'white' : 'var(--text-main)',
               boxShadow: isScanActive ? '0 4px 12px rgba(27, 94, 32, 0.3)' : '0 2px 4px rgba(0,0,0,0.05)',
-              borderBottom: isScanActive ? '2px solid #0a3a0e' : '2px solid rgba(0,0,0,0.05)'
+              borderBottom: isScanActive ? '2px solid #0a3a0e' : '2px solid rgba(0,0,0,0.05)',
+              opacity: isGettingLocation ? 0.7 : 1
             }}
           >
-            {isScanActive ? (
+            {isGettingLocation ? (
+              <>กำลังเปิดระบบและปักหมุดรัศมี...</>
+            ) : isScanActive ? (
               <>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><rect x="9" y="9" width="6" height="6"></rect></svg>
                 ปิดระบบรับสแกน

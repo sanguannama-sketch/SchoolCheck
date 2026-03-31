@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 
 type ScanLog = {
@@ -15,48 +15,179 @@ export default function FaceScanPage() {
   const [logs, setLogs] = useState<ScanLog[]>([]);
   const [isScanning, setIsScanning] = useState(true);
   const [lastScanned, setLastScanned] = useState<ScanLog | null>(null);
-  const [activeRoom, setActiveRoom] = useState<string | null>(null);
+  const [activeRooms, setActiveRooms] = useState<any[]>([]);
+  const [selectedRoom, setSelectedRoom] = useState<string>('');
+  const [manualName, setManualName] = useState("");
+  const [isLocating, setIsLocating] = useState(false);
+  const [locationErrorMsg, setLocationErrorMsg] = useState("");
+  
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const [cameraError, setCameraError] = useState(false);
 
   useEffect(() => {
+    // Camera activation logic
+    if (selectedRoom && isScanning && !cameraError) {
+      if (!streamRef.current) {
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })
+          .then((stream) => {
+            streamRef.current = stream;
+            if (videoRef.current) {
+              videoRef.current.srcObject = stream;
+            }
+          })
+          .catch((err) => {
+            console.error("Camera access error:", err);
+            setCameraError(true);
+          });
+      }
+    } else {
+      // Stop the camera
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current = null;
+        if (videoRef.current) {
+          videoRef.current.srcObject = null;
+        }
+      }
+    }
+
+    return () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [selectedRoom, isScanning, cameraError]);
+
+  useEffect(() => {
+    const updateStateFromStorage = () => {
+      try {
+        const savedRoomsStr = localStorage.getItem('activeScanRooms');
+        let rooms: any[] = [];
+        if (savedRoomsStr) {
+          rooms = JSON.parse(savedRoomsStr);
+        } else {
+          const legacyRoom = localStorage.getItem('activeScanRoom');
+          if (legacyRoom) rooms = [{ room: legacyRoom, lat: 0, lng: 0, radius: 0 }];
+        }
+        
+        setActiveRooms(rooms);
+        
+        if (rooms.length > 0) {
+          setIsScanning(true);
+          setSelectedRoom(prev => rooms.some(r => (r.room || r) === prev) ? prev : (rooms[0].room || rooms[0]));
+        } else {
+          setIsScanning(false);
+          setSelectedRoom('');
+        }
+      } catch (e) {
+        setActiveRooms([]);
+        setIsScanning(false);
+        setSelectedRoom('');
+      }
+    };
+
     // Initial load
-    const currentRoom = localStorage.getItem('activeScanRoom');
-    setActiveRoom(currentRoom);
-    if (!currentRoom) setIsScanning(false);
+    updateStateFromStorage();
     
     // Cross-tab synchronization
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'activeScanRoom') {
-        setActiveRoom(e.newValue);
-        if (!e.newValue) setIsScanning(false);
-        else setIsScanning(true);
+      if (e.key === 'activeScanRooms' || e.key === 'activeScanRoom') {
+        updateStateFromStorage();
       }
     };
     window.addEventListener('storage', handleStorageChange);
     return () => window.removeEventListener('storage', handleStorageChange);
   }, []);
 
-  const simulateScan = () => {
-    if (!isScanning || !activeRoom) return;
-    
-    setIsScanning(false);
-    
+  const executeSimulatedScan = () => {
     const isLate = Math.random() > 0.7; // 30% chance of being marked late
+    const fallbackName = isLate ? 'เด็กชาย มาสาย ปกติ' : 'เด็กหญิง ตั้งใจ เรียนดี';
+    const finalName = manualName.trim() !== '' ? manualName : fallbackName;
+    
     const mockStudent: ScanLog = {
       id: Math.random().toString(36).substring(7),
-      name: isLate ? 'เด็กชาย มาสาย ปกติ' : 'เด็กหญิง ตั้งใจ เรียนดี',
+      name: finalName,
       time: new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
       status: isLate ? 'late' : 'success',
-      avatar: isLate ? 'ด' : 'ต',
+      avatar: finalName.charAt(0),
     };
     
     setLastScanned(mockStudent);
     setLogs(prev => [mockStudent, ...prev].slice(0, 5)); // Keep last 5 scans
+    setManualName(""); // Reset input field
     
     // Resume scanning after 3 seconds
     setTimeout(() => {
       setLastScanned(null);
+      setLocationErrorMsg("");
       setIsScanning(true);
     }, 3000);
+  };
+
+  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const R = 6371e3;
+    const p1 = lat1 * Math.PI/180;
+    const p2 = lat2 * Math.PI/180;
+    const dp = (lat2-lat1) * Math.PI/180;
+    const dl = (lon2-lon1) * Math.PI/180;
+    const a = Math.sin(dp/2) * Math.sin(dp/2) + Math.cos(p1) * Math.cos(p2) * Math.sin(dl/2) * Math.sin(dl/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c; 
+  };
+
+  const simulateScan = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!isScanning || !selectedRoom) return;
+    
+    const config = activeRooms.find(r => (r.room || r) === selectedRoom);
+    if (!config || !config.lat) {
+      // If legacy or no GPS config, just execute
+      setIsScanning(false);
+      executeSimulatedScan();
+      return;
+    }
+
+    if (!navigator.geolocation) {
+      alert("เบราว์เซอร์ไม่ร้องรับ GPS");
+      return;
+    }
+
+    setIsLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setIsLocating(false);
+        const { latitude, longitude } = position.coords;
+        const dist = calculateDistance(latitude, longitude, config.lat, config.lng);
+        
+        setIsScanning(false);
+        if (dist > config.radius) {
+          // Geofence failed!
+          const errorLog: ScanLog = {
+            id: Math.random().toString(36).substring(7),
+            name: 'ไม่สามารถเช็คอินได้',
+            time: new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+            status: 'unknown',
+            avatar: '!',
+          };
+          setLocationErrorMsg(`อยู่นอกพื้นที่สแกน (ห่าง ${Math.round(dist)} ม. จากจุดที่กำหนด ${config.radius} ม.)`);
+          setLastScanned(errorLog);
+          setTimeout(() => {
+            setLastScanned(null);
+            setLocationErrorMsg("");
+            setIsScanning(true);
+          }, 4000);
+        } else {
+          // Success
+          executeSimulatedScan();
+        }
+      },
+      (error) => {
+        setIsLocating(false);
+        alert("กรุณาอนุญาต GPS เพื่อเช็คอิน");
+      },
+      { enableHighAccuracy: true }
+    );
   };
 
   return (
@@ -137,9 +268,25 @@ export default function FaceScanPage() {
           <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: 'linear-gradient(135deg, #4caf50, #81c784)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', fontWeight: 700 }}>SC</div>
           <div>
             <h1 style={{ fontSize: '1.25rem', fontWeight: 600, color: '#fff', margin: 0 }}>ระบบเช็คอิน (Kiosk Mode)</h1>
-            <p style={{ fontSize: '0.85rem', color: activeRoom ? '#81c784' : '#a0aec0', margin: 0, fontWeight: activeRoom ? 600 : 400 }}>
-              {activeRoom ? `กำลังเปิดรับสแกนห้อง: ${activeRoom}` : 'กรุณามองกล้องเพื่อเช็คชื่อเข้าเรียน'}
-            </p>
+            {activeRooms.length > 1 ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem' }}>
+                <span style={{ fontSize: '0.85rem', color: '#81c784', fontWeight: 600 }}>กำลังเปิดรับสแกน:</span>
+                <select 
+                  value={selectedRoom} 
+                  onChange={(e) => setSelectedRoom(e.target.value)}
+                  style={{ background: 'rgba(76, 175, 80, 0.1)', border: '1px solid rgba(76, 175, 80, 0.3)', color: '#81c784', borderRadius: '6px', padding: '0.2rem 0.5rem', fontSize: '0.85rem', outline: 'none', cursor: 'pointer' }}
+                >
+                  {activeRooms.map(r => {
+                    const roomName = r.room || r;
+                    return <option key={roomName} value={roomName} style={{ background: '#0a192f', color: '#fff' }}>{roomName}</option>
+                  })}
+                </select>
+              </div>
+            ) : (
+              <p style={{ fontSize: '0.85rem', color: selectedRoom ? '#81c784' : '#a0aec0', margin: 0, fontWeight: selectedRoom ? 600 : 400 }}>
+                {selectedRoom ? `กำลังเปิดรับสแกนห้อง: ${selectedRoom}` : 'กรุณามองกล้องเพื่อเช็คชื่อเข้าเรียน'}
+              </p>
+            )}
           </div>
         </div>
         
@@ -157,7 +304,7 @@ export default function FaceScanPage() {
           
           <div className="scanner-frame">
             {/* Locked Overlay */}
-            {!activeRoom && (
+            {!selectedRoom && (
               <div style={{ position: 'absolute', inset: 0, background: 'rgba(5, 12, 23, 0.95)', backdropFilter: 'blur(8px)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', zIndex: 30, color: '#fff', textAlign: 'center', padding: '2rem' }}>
                 <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#607d8b" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: '1rem', opacity: 0.8 }}><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
                 <h3 style={{ margin: '0 0 0.5rem 0', color: '#b0bec5', fontSize: '1.25rem' }}>ระบบสแกนยังไม่เปิดทำงาน</h3>
@@ -165,40 +312,73 @@ export default function FaceScanPage() {
               </div>
             )}
 
-            {activeRoom && isScanning && <div className="scan-line"></div>}
+            {selectedRoom && isScanning && <div className="scan-line"></div>}
             
             <div className="corner corner-tl"></div>
             <div className="corner corner-tr"></div>
             <div className="corner corner-bl"></div>
             <div className="corner corner-br"></div>
             
-            {/* Fake Guide Silhouette */}
-            <svg width="200" height="200" viewBox="0 0 24 24" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.1)" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" style={{ zIndex: 1 }}>
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-              <circle cx="12" cy="7" r="4"></circle>
-            </svg>
+            {/* Camera Feed or Fake Guide Silhouette */}
+            {(!cameraError && selectedRoom && isScanning) ? (
+              <video 
+                ref={videoRef} 
+                autoPlay 
+                playsInline 
+                muted 
+                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', zIndex: 0, filter: 'brightness(0.8) contrast(1.1)' }} 
+              />
+            ) : (
+              <svg width="200" height="200" viewBox="0 0 24 24" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.1)" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" style={{ zIndex: 1 }}>
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                <circle cx="12" cy="7" r="4"></circle>
+              </svg>
+            )}
 
-            {/* Success Overlay Pop-up */}
+            {/* Success/Error Overlay Pop-up */}
             {lastScanned && (
               <div className="success-overlay">
-                <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: lastScanned.status === 'success' ? '#4caf50' : '#f57c00', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', marginBottom: '1rem', boxShadow: lastScanned.status === 'success' ? '0 8px 32px rgba(76,175,80,0.4)' : '0 8px 32px rgba(245,124,0,0.4)' }}>
-                  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="20 6 9 17 4 12"></polyline>
-                  </svg>
+                <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: locationErrorMsg ? '#d32f2f' : (lastScanned.status === 'success' ? '#4caf50' : '#f57c00'), display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', marginBottom: '1rem', boxShadow: locationErrorMsg ? '0 8px 32px rgba(211,47,47,0.4)' : (lastScanned.status === 'success' ? '0 8px 32px rgba(76,175,80,0.4)' : '0 8px 32px rgba(245,124,0,0.4)') }}>
+                  {locationErrorMsg ? (
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                  ) : (
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  )}
                 </div>
-                <h2 style={{ fontSize: '1.5rem', fontWeight: 700, margin: '0 0 0.5rem 0', color: '#fff' }}>สวัสดี, {lastScanned.name}</h2>
-                <span style={{ padding: '0.4rem 1rem', borderRadius: '20px', background: lastScanned.status === 'success' ? 'rgba(76,175,80,0.2)' : 'rgba(245,124,0,0.2)', color: lastScanned.status === 'success' ? '#81c784' : '#ffb74d', fontWeight: 600, fontSize: '0.9rem' }}>
-                  {lastScanned.status === 'success' ? 'บันทึกเวลามาเรียนเรียบร้อย' : 'บันทึกเวลามาสาย'} - {lastScanned.time}
+                <h2 style={{ fontSize: '1.5rem', fontWeight: 700, margin: '0 0 0.5rem 0', color: locationErrorMsg ? '#ef5350' : '#fff', textAlign: 'center' }}>
+                  {locationErrorMsg ? 'การเช็คอินถูกระงับ' : `สวัสดี, ${lastScanned.name}`}
+                </h2>
+                <span style={{ padding: '0.4rem 1rem', borderRadius: '20px', background: locationErrorMsg ? 'rgba(211,47,47,0.2)' : (lastScanned.status === 'success' ? 'rgba(76,175,80,0.2)' : 'rgba(245,124,0,0.2)'), color: locationErrorMsg ? '#ef5350' : (lastScanned.status === 'success' ? '#81c784' : '#ffb74d'), fontWeight: 600, fontSize: '0.9rem', textAlign: 'center' }}>
+                  {locationErrorMsg || ((lastScanned.status === 'success' ? 'บันทึกเวลามาเรียนเรียบร้อย' : 'บันทึกเวลามาสาย') + ' - ' + lastScanned.time)}
                 </span>
               </div>
             )}
           </div>
 
-          <div style={{ marginTop: '2rem', textAlign: 'center' }}>
-            <p style={{ color: '#8892b0', fontSize: '0.95rem', marginBottom: '1rem' }}>โหมดจำลอง: กดปุ่มเพื่อจำลองเหตุการณ์ใบหน้าผ่านกล้อง</p>
-            <button onClick={simulateScan} disabled={!isScanning || !activeRoom} style={{ padding: '0.75rem 2rem', background: (isScanning && activeRoom) ? '#1b5e20' : '#2A3B4C', color: (isScanning && activeRoom) ? 'white' : '#8892b0', border: 'none', borderRadius: '12px', fontSize: '1rem', fontWeight: 600, cursor: (isScanning && activeRoom) ? 'pointer' : 'not-allowed', boxShadow: (isScanning && activeRoom) ? '0 4px 14px rgba(27,94,32,0.4)' : 'none', transition: 'all 0.2s' }}>
-              {(isScanning && activeRoom) ? `🔍 จำลองสแกนใบหน้าของ ${activeRoom}` : 'รอการเปิดระบบ...'}
-            </button>
+          <div style={{ marginTop: '2rem', textAlign: 'center', width: '100%', maxWidth: '320px' }}>
+            <p style={{ color: '#8892b0', fontSize: '0.95rem', marginBottom: '1rem' }}>โหมดจำลอง: พิมพ์ชื่อเพื่อเช็คอิน</p>
+            <form onSubmit={simulateScan} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <input
+                type="text"
+                value={manualName}
+                onChange={(e) => setManualName(e.target.value)}
+                placeholder="กรอกชื่อ-นามสกุล..."
+                disabled={!isScanning || !selectedRoom}
+                style={{
+                  padding: '0.85rem',
+                  borderRadius: '12px',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  background: 'rgba(255,255,255,0.05)',
+                  color: 'white',
+                  textAlign: 'center',
+                  fontSize: '1rem',
+                  outline: 'none',
+                }}
+              />
+              <button type="submit" disabled={!isScanning || !selectedRoom || isLocating} style={{ padding: '0.85rem 2rem', background: (isScanning && selectedRoom && !isLocating) ? '#1b5e20' : '#2A3B4C', color: (isScanning && selectedRoom) ? 'white' : '#8892b0', border: 'none', borderRadius: '12px', fontSize: '1rem', fontWeight: 600, cursor: (isScanning && selectedRoom && !isLocating) ? 'pointer' : 'not-allowed', boxShadow: (isScanning && selectedRoom && !isLocating) ? '0 4px 14px rgba(27,94,32,0.4)' : 'none', transition: 'all 0.2s' }}>
+                {isLocating ? 'กำลังค้นหาและประมวลผลพิกัด...' : ((isScanning && selectedRoom) ? `🔍 จำลองสแกนใบหน้า` : 'รอการเปิดระบบ...')}
+              </button>
+            </form>
           </div>
         </div>
 
