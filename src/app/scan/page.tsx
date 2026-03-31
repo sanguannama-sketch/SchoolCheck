@@ -15,9 +15,28 @@ export default function FaceScanPage() {
   const [logs, setLogs] = useState<ScanLog[]>([]);
   const [isScanning, setIsScanning] = useState(true);
   const [lastScanned, setLastScanned] = useState<ScanLog | null>(null);
+  const [activeRoom, setActiveRoom] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Initial load
+    const currentRoom = localStorage.getItem('activeScanRoom');
+    setActiveRoom(currentRoom);
+    if (!currentRoom) setIsScanning(false);
+    
+    // Cross-tab synchronization
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'activeScanRoom') {
+        setActiveRoom(e.newValue);
+        if (!e.newValue) setIsScanning(false);
+        else setIsScanning(true);
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
 
   const simulateScan = () => {
-    if (!isScanning) return;
+    if (!isScanning || !activeRoom) return;
     
     setIsScanning(false);
     
@@ -118,7 +137,9 @@ export default function FaceScanPage() {
           <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: 'linear-gradient(135deg, #4caf50, #81c784)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', fontWeight: 700 }}>SC</div>
           <div>
             <h1 style={{ fontSize: '1.25rem', fontWeight: 600, color: '#fff', margin: 0 }}>ระบบเช็คอิน (Kiosk Mode)</h1>
-            <p style={{ fontSize: '0.85rem', color: '#a0aec0', margin: 0 }}>กรุณามองกล้องเพื่อเช็คชื่อเข้าเรียน</p>
+            <p style={{ fontSize: '0.85rem', color: activeRoom ? '#81c784' : '#a0aec0', margin: 0, fontWeight: activeRoom ? 600 : 400 }}>
+              {activeRoom ? `กำลังเปิดรับสแกนห้อง: ${activeRoom}` : 'กรุณามองกล้องเพื่อเช็คชื่อเข้าเรียน'}
+            </p>
           </div>
         </div>
         
@@ -135,7 +156,16 @@ export default function FaceScanPage() {
         <div style={{ flex: '1 1 500px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
           
           <div className="scanner-frame">
-            {isScanning && <div className="scan-line"></div>}
+            {/* Locked Overlay */}
+            {!activeRoom && (
+              <div style={{ position: 'absolute', inset: 0, background: 'rgba(5, 12, 23, 0.95)', backdropFilter: 'blur(8px)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', zIndex: 30, color: '#fff', textAlign: 'center', padding: '2rem' }}>
+                <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#607d8b" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: '1rem', opacity: 0.8 }}><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                <h3 style={{ margin: '0 0 0.5rem 0', color: '#b0bec5', fontSize: '1.25rem' }}>ระบบสแกนยังไม่เปิดทำงาน</h3>
+                <p style={{ margin: 0, fontSize: '0.9rem', color: '#78909c' }}>กรุณารอคุณครูประจำชั้นเปิดระบบจากแผงควบคุม</p>
+              </div>
+            )}
+
+            {activeRoom && isScanning && <div className="scan-line"></div>}
             
             <div className="corner corner-tl"></div>
             <div className="corner corner-tr"></div>
@@ -166,8 +196,8 @@ export default function FaceScanPage() {
 
           <div style={{ marginTop: '2rem', textAlign: 'center' }}>
             <p style={{ color: '#8892b0', fontSize: '0.95rem', marginBottom: '1rem' }}>โหมดจำลอง: กดปุ่มเพื่อจำลองเหตุการณ์ใบหน้าผ่านกล้อง</p>
-            <button onClick={simulateScan} disabled={!isScanning} style={{ padding: '0.75rem 2rem', background: isScanning ? '#1b5e20' : '#2A3B4C', color: isScanning ? 'white' : '#8892b0', border: 'none', borderRadius: '12px', fontSize: '1rem', fontWeight: 600, cursor: isScanning ? 'pointer' : 'not-allowed', boxShadow: isScanning ? '0 4px 14px rgba(27,94,32,0.4)' : 'none', transition: 'all 0.2s' }}>
-              {isScanning ? '🔍 แตะจุดนี้เพื่อจำลองสแกนใบหน้า' : 'รอการรีเซ็ตระบบกล้อง...'}
+            <button onClick={simulateScan} disabled={!isScanning || !activeRoom} style={{ padding: '0.75rem 2rem', background: (isScanning && activeRoom) ? '#1b5e20' : '#2A3B4C', color: (isScanning && activeRoom) ? 'white' : '#8892b0', border: 'none', borderRadius: '12px', fontSize: '1rem', fontWeight: 600, cursor: (isScanning && activeRoom) ? 'pointer' : 'not-allowed', boxShadow: (isScanning && activeRoom) ? '0 4px 14px rgba(27,94,32,0.4)' : 'none', transition: 'all 0.2s' }}>
+              {(isScanning && activeRoom) ? `🔍 จำลองสแกนใบหน้าของ ${activeRoom}` : 'รอการเปิดระบบ...'}
             </button>
           </div>
         </div>

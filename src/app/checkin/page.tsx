@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 interface Student {
   id: number;
@@ -32,6 +32,36 @@ const initialStudents: Student[] = [
 export default function CheckinPage() {
   const [students, setStudents] = useState<Student[]>(initialStudents);
   const [classFilter, setClassFilter] = useState('ม.1/1');
+  const [isScanActive, setIsScanActive] = useState(false);
+
+  // Sync scan state based on selected class
+  useEffect(() => {
+    const savedRoom = localStorage.getItem('activeScanRoom');
+    if (savedRoom === classFilter) {
+      setIsScanActive(true);
+    } else {
+      setIsScanActive(false);
+    }
+    
+    // Listen to changes (cross-tab)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'activeScanRoom') {
+        setIsScanActive(e.newValue === classFilter);
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, [classFilter]);
+
+  const toggleScan = () => {
+    if (isScanActive) {
+      localStorage.removeItem('activeScanRoom');
+      setIsScanActive(false);
+    } else {
+      localStorage.setItem('activeScanRoom', classFilter);
+      setIsScanActive(true);
+    }
+  };
   const [date, setDate] = useState(() => {
     const today = new Date();
     return today.toISOString().split('T')[0];
@@ -123,6 +153,31 @@ export default function CheckinPage() {
             </select>
           </div>
 
+        </div>
+        
+        <div style={{ display: 'flex' }}>
+          <button 
+            onClick={toggleScan}
+            style={{ 
+              display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.6rem 1rem', borderRadius: '10px', fontWeight: 600, fontSize: '0.9rem', cursor: 'pointer', transition: 'all 0.2s', border: 'none',
+              background: isScanActive ? 'var(--text-main)' : 'rgba(255,255,255,0.8)', 
+              color: isScanActive ? 'white' : 'var(--text-main)',
+              boxShadow: isScanActive ? '0 4px 12px rgba(27, 94, 32, 0.3)' : '0 2px 4px rgba(0,0,0,0.05)',
+              borderBottom: isScanActive ? '2px solid #0a3a0e' : '2px solid rgba(0,0,0,0.05)'
+            }}
+          >
+            {isScanActive ? (
+              <>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><rect x="9" y="9" width="6" height="6"></rect></svg>
+                ปิดระบบรับสแกน
+              </>
+            ) : (
+              <>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 8l4 4-4 4M8 12h7"></path></svg>
+                เปิดสแกนห้องนี้
+              </>
+            )}
+          </button>
         </div>
       </div>
 
