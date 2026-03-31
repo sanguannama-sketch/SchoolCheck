@@ -231,6 +231,9 @@ body {
   padding: 0.4rem;
   border-radius: 10px;
   transition: var(--transition-smooth);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .notif-btn:hover { background: rgba(255,255,255,0.6); }
 
@@ -409,6 +412,9 @@ body {
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes modalSlideUp { from { opacity: 0; transform: translateY(30px) scale(0.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
 
+/* ========== UTILITIES ========== */
+.d-mobile-only { display: none !important; }
+
 /* ========== ANIMATIONS ========== */
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(20px); }
@@ -469,6 +475,7 @@ body {
   .search-bar { width: 100%; max-width: 180px; padding: 0.5rem 1rem; font-size: 0.85rem; }
   .search-bar:focus { width: 100%; max-width: 200px; }
   .user-profile span { display: none; }
+  .d-mobile-only { display: flex !important; }
   .main-content { padding: 1rem; }
 
   /* Responsive Table -> Cards */
