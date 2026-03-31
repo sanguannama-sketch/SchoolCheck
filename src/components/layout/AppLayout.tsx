@@ -7,8 +7,9 @@ import Header from './Header';
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
-  // ตรวจสอบว่าหน้าปัจจุบันคือหน้า Login หรือไม่
-  if (pathname === '/login') {
+  // ตรวจสอบว่าหน้าปัจจุบันคือหน้า Login หรือสแกนเช็คอินหรือไม่
+  const isPublicRoute = ['/login', '/scan'].includes(pathname || '');
+  if (isPublicRoute) {
     return <main>{children}</main>;
   }
 
