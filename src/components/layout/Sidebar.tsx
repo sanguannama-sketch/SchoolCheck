@@ -53,6 +53,10 @@ export default function Sidebar() {
   const pathname = usePathname();
   const [expanded, setExpanded] = useState(false);
 
+  const mobileItems = navItems.slice(0, 5);
+  const activeIndex = mobileItems.findIndex(item => item.href === pathname);
+  const validIndex = activeIndex >= 0 ? activeIndex : 0;
+
   return (
     <>
       {/* Desktop Sidebar – icon rail, expands on hover */}
@@ -88,18 +92,32 @@ export default function Sidebar() {
         </nav>
       </aside>
 
-      {/* Mobile Bottom Navigation */}
+      {/* Mobile Bottom Navigation – Sliding Wave */}
       <nav className="bottom-nav">
-        {navItems.slice(0, 5).map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={`bottom-nav-item ${pathname === item.href ? 'active' : ''}`}
-          >
-            {item.icon}
-            <span>{item.label}</span>
-          </Link>
-        ))}
+        {/* Wave indicator that slides to active item */}
+        <div
+          className="bnav-indicator"
+          style={{ left: `${validIndex * 20 + 10}%` }}
+        >
+          <div className="bnav-ind-curve" />
+          <div className="bnav-ind-corner-l" />
+          <div className="bnav-ind-corner-r" />
+          <div className="bnav-ind-bubble" />
+        </div>
+
+        {mobileItems.map((item, idx) => {
+          const isActive = idx === validIndex;
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`bnav-item ${isActive ? 'bnav-active' : ''}`}
+            >
+              <div className="bnav-icon">{item.icon}</div>
+              <span className="bnav-label">{item.label}</span>
+            </Link>
+          );
+        })}
       </nav>
     </>
   );

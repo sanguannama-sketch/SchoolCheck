@@ -179,9 +179,143 @@ body {
   stroke: white;
 }
 
-/* ========== BOTTOM NAV (Mobile) ========== */
+/* ========== BOTTOM NAV (Mobile) – Sliding Wave ========== */
 .bottom-nav {
   display: none;
+}
+
+/* ---- Nav Items ---- */
+.bnav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding-top: 16px;
+  gap: 3px;
+  text-decoration: none;
+  color: #9e9e9e;
+  flex: 1 1 0px;
+  width: 20%;
+  min-width: 0;
+  position: relative;
+  height: 100%;
+  z-index: 10;
+  transition: color 0.4s ease;
+  overflow: visible;
+}
+.bnav-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+  position: relative;
+  z-index: 12;
+}
+.bnav-icon svg {
+  width: 24px;
+  height: 24px;
+  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.bnav-label {
+  font-size: 0.6rem;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 68px;
+  text-align: center;
+  transition: all 0.4s ease;
+  position: relative;
+  z-index: 12;
+}
+
+/* ---- Active Item ---- */
+.bnav-active {
+  color: var(--text-main);
+}
+.bnav-active .bnav-icon {
+  transform: translateY(-26px);
+}
+.bnav-active .bnav-icon svg {
+  width: 26px;
+  height: 26px;
+  stroke: white;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.18));
+}
+.bnav-active .bnav-label {
+  font-weight: 700;
+  color: var(--text-main);
+  font-size: 0.65rem;
+}
+
+/* ---- Sliding Wave Indicator ---- */
+.bnav-indicator {
+  position: absolute;
+  top: 0;
+  width: 80px;
+  height: 38px;
+  transform: translateX(-50%);
+  z-index: 5;
+  pointer-events: none;
+  transition: left 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* The curved background (the cutout hole) */
+.bnav-ind-curve {
+  position: absolute;
+  inset: 0;
+  background: var(--primary-bg);
+  border-radius: 0 0 40px 40px;
+}
+
+/* Inverted corner – left shoulder */
+.bnav-ind-corner-l {
+  position: absolute;
+  top: 0;
+  left: -20px;
+  width: 20px;
+  height: 20px;
+  background: var(--primary-bg);
+}
+.bnav-ind-corner-l::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: white; /* Nav bar color */
+  border-top-right-radius: 20px;
+}
+
+/* Inverted corner – right shoulder */
+.bnav-ind-corner-r {
+  position: absolute;
+  top: 0;
+  right: -20px;
+  width: 20px;
+  height: 20px;
+  background: var(--primary-bg);
+}
+.bnav-ind-corner-r::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: white; /* Nav bar color */
+  border-top-left-radius: 20px;
+}
+
+/* Green floating bubble */
+.bnav-ind-bubble {
+  position: absolute;
+  top: -24px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #43a047, #66bb6a);
+  box-shadow: 0 6px 20px rgba(67, 160, 71, 0.45);
+  z-index: 6;
 }
 
 /* ========== TOP HEADER ========== */
@@ -440,35 +574,14 @@ body {
     bottom: 0;
     left: 0;
     right: 0;
-    height: 70px;
-    background: rgba(255, 255, 255, 0.75);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border-top: 1px solid var(--border-light);
+    box-sizing: border-box;
+    height: calc(70px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    background: white;
     z-index: 100;
-    justify-content: space-around;
-    align-items: center;
-    padding: 0 0.5rem;
-  }
-
-  .bottom-nav-item {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.2rem;
-    text-decoration: none;
-    color: var(--text-muted);
-    font-size: 0.65rem;
-    font-weight: 500;
-    padding: 0.5rem;
-    border-radius: 12px;
-    transition: var(--transition-smooth);
-    min-width: 56px;
-  }
-  .bottom-nav-item svg { width: 20px; height: 20px; }
-  .bottom-nav-item.active {
-    color: var(--text-main);
-    background: rgba(129, 199, 132, 0.2);
+    align-items: stretch;
+    overflow: visible;
+    box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.06);
   }
 
   .top-header { padding: 0 1rem; height: 64px; }
