@@ -191,34 +191,34 @@ export default function FaceScanPage() {
   };
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0a192f', color: '#fff', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ minHeight: '100vh', background: 'radial-gradient(circle at center 30%, #112240 0%, #0a192f 100%)', color: '#fff', display: 'flex', flexDirection: 'column', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
       {/* CSS สำหรับ Animation โหมดสแกน */}
       <style dangerouslySetInnerHTML={{__html: `
         @keyframes scanLineAnim {
           0% { top: 0%; opacity: 0; }
-          10% { opacity: 1; }
-          90% { opacity: 1; }
+          15% { opacity: 1; }
+          85% { opacity: 1; }
           100% { top: 100%; opacity: 0; }
         }
-        @keyframes pulseBorder {
-          0% { border-color: rgba(76, 175, 80, 0.3); box-shadow: 0 0 10px rgba(76, 175, 80, 0.1); }
-          50% { border-color: rgba(76, 175, 80, 1); box-shadow: 0 0 30px rgba(76, 175, 80, 0.6); }
-          100% { border-color: rgba(76, 175, 80, 0.3); box-shadow: 0 0 10px rgba(76, 175, 80, 0.1); }
+        @keyframes pulseGlow {
+          0%, 100% { box-shadow: 0 0 40px rgba(0, 230, 118, 0.15), inset 0 0 60px rgba(0, 230, 118, 0.05); border-color: rgba(0, 230, 118, 0.3); }
+          50% { box-shadow: 0 0 60px rgba(0, 230, 118, 0.3), inset 0 0 80px rgba(0, 230, 118, 0.1); border-color: rgba(0, 230, 118, 0.6); }
         }
         @keyframes successPop {
-          0% { transform: scale(0.9); opacity: 0; }
-          100% { transform: scale(1); opacity: 1; }
+          0% { transform: scale(0.95); opacity: 0; filter: blur(4px); }
+          100% { transform: scale(1); opacity: 1; filter: blur(0); }
         }
         .scanner-frame {
           position: relative;
           width: 100%;
-          max-width: 400px;
+          max-width: 380px;
           height: 480px;
-          border-radius: 20px;
+          border-radius: 32px;
           overflow: hidden;
-          background: #0d233a;
-          border: 3px solid rgba(76, 175, 80, 0.4);
-          animation: pulseBorder 2s infinite;
+          background: rgba(10, 25, 47, 0.4);
+          backdrop-filter: blur(12px);
+          border: 1px solid rgba(0, 230, 118, 0.2);
+          animation: pulseGlow 3s ease-in-out infinite;
           display: flex;
           align-items: center;
           justify-content: center;
@@ -228,44 +228,70 @@ export default function FaceScanPage() {
           position: absolute;
           left: 0;
           width: 100%;
-          height: 4px;
-          background: #4caf50;
-          box-shadow: 0 0 20px 4px #4caf50;
-          animation: scanLineAnim 2.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+          height: 60px;
+          background: linear-gradient(to bottom, transparent, rgba(0, 230, 118, 0.1) 80%, rgba(0, 230, 118, 0.8) 100%);
+          animation: scanLineAnim 3s cubic-bezier(0.4, 0, 0.2, 1) infinite;
           z-index: 10;
+        }
+        /* ลบเส้น box-shadow แข็งๆ เปลี่ยนเป็นเส้นเลเซอร์ชัดๆ */
+        .scan-line::after {
+          content: '';
+          position: absolute;
+          bottom: 0;
+          left: 5%;
+          width: 90%;
+          height: 2px;
+          background: #00e676;
+          box-shadow: 0 0 15px 2px #00e676;
+          border-radius: 50%;
         }
         .corner {
           position: absolute;
-          width: 40px;
-          height: 40px;
-          border-width: 4px;
+          width: 50px;
+          height: 50px;
+          border-width: 3px;
           border-style: solid;
-          border-color: #81c784;
+          border-color: #00e676;
+          opacity: 0.8;
           z-index: 5;
+          border-radius: 8px; /* มุมมนนิดๆ เพื่อความนุ่มนวล */
+          box-shadow: 0 0 10px rgba(0, 230, 118, 0.3), inset 0 0 10px rgba(0, 230, 118, 0.3);
+          transition: all 0.3s ease;
         }
-        .corner-tl { top: 20px; left: 20px; border-right: none; border-bottom: none; border-radius: 12px 0 0 0; }
-        .corner-tr { top: 20px; right: 20px; border-left: none; border-bottom: none; border-radius: 0 12px 0 0; }
-        .corner-bl { bottom: 20px; left: 20px; border-right: none; border-top: none; border-radius: 0 0 0 12px; }
-        .corner-br { bottom: 20px; right: 20px; border-left: none; border-top: none; border-radius: 0 0 12px 0; }
+        /* กำหนดมุม 4 ด้าน โดยลบเส้นขอบบางส่วนออก */
+        .corner-tl { top: 24px; left: 24px; border-right: none; border-bottom: none; border-bottom-right-radius: 0; border-bottom-left-radius: 0; border-top-right-radius: 0; }
+        .corner-tr { top: 24px; right: 24px; border-left: none; border-bottom: none; border-bottom-left-radius: 0; border-bottom-right-radius: 0; border-top-left-radius: 0; }
+        .corner-bl { bottom: 24px; left: 24px; border-right: none; border-top: none; border-top-right-radius: 0; border-top-left-radius: 0; border-bottom-right-radius: 0; }
+        .corner-br { bottom: 24px; right: 24px; border-left: none; border-top: none; border-top-left-radius: 0; border-top-right-radius: 0; border-bottom-left-radius: 0; }
         
         .success-overlay {
           position: absolute;
           inset: 0;
-          background: rgba(10, 25, 47, 0.85);
-          backdrop-filter: blur(8px);
+          background: rgba(10, 25, 47, 0.7);
+          backdrop-filter: blur(12px);
           display: flex;
           flex-direction: column;
           align-items: center;
           justify-content: center;
           z-index: 20;
-          animation: successPop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+          animation: successPop 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+        }
+        .glass-panel {
+          background: rgba(13, 35, 58, 0.5);
+          backdrop-filter: blur(16px);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+        .glow-btn:not(:disabled):hover {
+          transform: translateY(-2px);
+          box-shadow: 0 8px 24px rgba(0, 230, 118, 0.4) !important;
         }
       `}} />
 
       {/* Header */}
-      <header style={{ padding: '1.5rem 2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.2)', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: 'linear-gradient(135deg, #4caf50, #81c784)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', fontWeight: 700 }}>SC</div>
+      <header className="glass-panel" style={{ padding: '1.25rem 2.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)', position: 'sticky', top: 0, zIndex: 100 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
+          <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: 'linear-gradient(135deg, #00e676, #00b0ff)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', fontWeight: 800, boxShadow: '0 4px 12px rgba(0, 230, 118, 0.3)' }}>SC</div>
           <div>
             <h1 style={{ fontSize: '1.25rem', fontWeight: 600, color: '#fff', margin: 0 }}>ระบบเช็คอิน (Kiosk Mode)</h1>
             {activeRooms.length > 1 ? (
@@ -290,7 +316,7 @@ export default function FaceScanPage() {
           </div>
         </div>
         
-        <Link href="/" style={{ padding: '0.5rem 1rem', borderRadius: '10px', background: 'rgba(255,255,255,0.1)', color: '#fff', textDecoration: 'none', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.5rem', transition: 'all 0.2s' }}>
+        <Link href="/" className="glow-btn" style={{ padding: '0.6rem 1.25rem', borderRadius: '12px', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', textDecoration: 'none', fontSize: '0.9rem', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '0.5rem', transition: 'all 0.3s ease' }}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
           กลับสู่แผงควบคุม
         </Link>
@@ -355,9 +381,9 @@ export default function FaceScanPage() {
             )}
           </div>
 
-          <div style={{ marginTop: '2rem', textAlign: 'center', width: '100%', maxWidth: '320px' }}>
-            <p style={{ color: '#8892b0', fontSize: '0.95rem', marginBottom: '1rem' }}>โหมดจำลอง: พิมพ์ชื่อเพื่อเช็คอิน</p>
-            <form onSubmit={simulateScan} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          <div className="glass-panel" style={{ marginTop: '2.5rem', borderRadius: '24px', padding: '1.5rem', width: '100%', maxWidth: '380px' }}>
+            <p style={{ color: '#8892b0', fontSize: '0.9rem', marginBottom: '1.25rem', textAlign: 'center', fontWeight: 500 }}>โหมดจำลองการสแกนใบหน้า</p>
+            <form onSubmit={simulateScan} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <input
                 type="text"
                 value={manualName}
@@ -365,25 +391,59 @@ export default function FaceScanPage() {
                 placeholder="กรอกชื่อ-นามสกุล..."
                 disabled={!isScanning || !selectedRoom}
                 style={{
-                  padding: '0.85rem',
-                  borderRadius: '12px',
+                  padding: '1rem',
+                  borderRadius: '16px',
                   border: '1px solid rgba(255,255,255,0.1)',
-                  background: 'rgba(255,255,255,0.05)',
+                  background: 'rgba(0,0,0,0.3)',
                   color: 'white',
                   textAlign: 'center',
                   fontSize: '1rem',
                   outline: 'none',
+                  transition: 'all 0.3s ease',
+                  boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.2)'
                 }}
+                onFocus={(e) => e.target.style.borderColor = 'rgba(0, 230, 118, 0.5)'}
+                onBlur={(e) => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
               />
-              <button type="submit" disabled={!isScanning || !selectedRoom || isLocating} style={{ padding: '0.85rem 2rem', background: (isScanning && selectedRoom && !isLocating) ? '#1b5e20' : '#2A3B4C', color: (isScanning && selectedRoom) ? 'white' : '#8892b0', border: 'none', borderRadius: '12px', fontSize: '1rem', fontWeight: 600, cursor: (isScanning && selectedRoom && !isLocating) ? 'pointer' : 'not-allowed', boxShadow: (isScanning && selectedRoom && !isLocating) ? '0 4px 14px rgba(27,94,32,0.4)' : 'none', transition: 'all 0.2s' }}>
-                {isLocating ? 'กำลังค้นหาและประมวลผลพิกัด...' : ((isScanning && selectedRoom) ? `🔍 จำลองสแกนใบหน้า` : 'รอการเปิดระบบ...')}
+              <button 
+                type="submit" 
+                disabled={!isScanning || !selectedRoom || isLocating} 
+                className={isScanning && selectedRoom && !isLocating ? 'glow-btn' : ''}
+                style={{ 
+                  padding: '1rem', 
+                  background: (isScanning && selectedRoom && !isLocating) ? 'linear-gradient(135deg, #00c853, #00e676)' : 'rgba(255,255,255,0.05)', 
+                  color: (isScanning && selectedRoom) ? 'white' : '#596a84', 
+                  border: 'none', 
+                  borderRadius: '16px', 
+                  fontSize: '1rem', 
+                  fontWeight: 600, 
+                  cursor: (isScanning && selectedRoom && !isLocating) ? 'pointer' : 'not-allowed', 
+                  boxShadow: (isScanning && selectedRoom && !isLocating) ? '0 4px 14px rgba(0,230,118,0.2)' : 'none', 
+                  transition: 'all 0.3s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.5rem'
+                }}
+              >
+                {isLocating ? (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <svg className="animate-spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg>
+                    กำลังประมวลผลพิกัด...
+                  </span>
+                ) : ((isScanning && selectedRoom) ? (
+                  <>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                    เริ่มสแกนใบหน้า
+                  </>
+                ) : 'รอการเปิดระบบ...')}
               </button>
             </form>
           </div>
         </div>
 
         {/* Scan Log/Sidebar Area */}
-        <div style={{ flex: '1 1 300px', background: 'rgba(255,255,255,0.03)', borderRadius: '24px', padding: '1.5rem', border: '1px solid rgba(255,255,255,0.05)' }}>
+        <div className="glass-panel" style={{ flex: '1 1 300px', borderRadius: '32px', padding: '2rem', display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
             <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: '#fff', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4caf50" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
@@ -400,8 +460,8 @@ export default function FaceScanPage() {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
               {logs.map((log, index) => (
-                <div key={log.id} style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '1rem', background: 'rgba(0,0,0,0.2)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.02)', animation: 'successPop 0.3s ease-out' }}>
-                  <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: log.status === 'success' ? '#2e7d32' : '#e65100', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
+                <div key={log.id} style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '1rem', background: 'rgba(0,0,0,0.3)', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.03)', animation: 'successPop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)' }}>
+                  <div style={{ width: '48px', height: '48px', borderRadius: '16px', background: log.status === 'success' ? 'linear-gradient(135deg, #00c853, #00e676)' : 'linear-gradient(135deg, #ff9100, #ff6d00)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '1.2rem', boxShadow: log.status === 'success' ? '0 4px 12px rgba(0,230,118,0.3)' : '0 4px 12px rgba(255,145,0,0.3)' }}>
                     {log.avatar}
                   </div>
                   <div style={{ flex: 1 }}>
