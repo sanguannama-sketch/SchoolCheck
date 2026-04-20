@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import { useToast } from '@/components/Toast';
 
 type ScanLog = {
   id: string;
@@ -20,6 +21,7 @@ export default function FaceScanPage() {
   const [manualName, setManualName] = useState("");
   const [isLocating, setIsLocating] = useState(false);
   const [locationErrorMsg, setLocationErrorMsg] = useState("");
+  const { showToast } = useToast();
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -172,7 +174,7 @@ export default function FaceScanPage() {
     }
 
     if (!navigator.geolocation) {
-      alert("เบราว์เซอร์ไม่ร้องรับ GPS");
+      showToast('เบราว์เซอร์ไม่รองรับ GPS', 'error');
       return;
     }
 
@@ -207,7 +209,7 @@ export default function FaceScanPage() {
       },
       (error) => {
         setIsLocating(false);
-        alert("กรุณาอนุญาต GPS เพื่อเช็คอิน");
+        showToast('กรุณาอนุญาต GPS เพื่อเช็คอิน', 'warning');
       },
       { enableHighAccuracy: true }
     );

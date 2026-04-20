@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
+import { useToast } from '@/components/Toast';
 
 interface Student {
   id: number;
@@ -35,6 +36,8 @@ export default function CheckinPage() {
   const [isScanActive, setIsScanActive] = useState(false);
   const [allowedDistance, setAllowedDistance] = useState<number>(100);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
+
+  const { showToast } = useToast();
 
   // Gesture command before scan
   const gestures = [
@@ -104,7 +107,7 @@ export default function CheckinPage() {
     } else {
       // Add room - requires GPS
       if (!navigator.geolocation) {
-        alert("เบราว์เซอร์ของคุณไม่รองรับ GPS");
+        showToast('เบราว์เซอร์ของคุณไม่รองรับ GPS', 'error');
         return;
       }
       setIsGettingLocation(true);
@@ -127,7 +130,7 @@ export default function CheckinPage() {
         },
         (error) => {
           setIsGettingLocation(false);
-          alert("ไม่สามารถเข้าถึงตำแหน่งที่ตั้งได้ กรุณาอนุญาตให้ระบบเข้าถึง GPS เพื่อตั้งค่าจุดสแกน");
+          showToast('ไม่สามารถเข้าถึงตำแหน่งที่ตั้งได้ กรุณาอนุญาตให้ระบบเข้าถึง GPS', 'warning');
         },
         { enableHighAccuracy: true }
       );
@@ -618,7 +621,7 @@ export default function CheckinPage() {
 
       {/* Action Footer */}
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '2rem' }}>
-        <button className="btn-primary" style={{ padding: '0.8rem 2rem', fontSize: '1rem', boxShadow: '0 4px 15px rgba(27, 94, 32, 0.3)' }} onClick={() => alert('บันทึกข้อมูลการเช็คชื่อสำเร็จ!')}>
+        <button className="btn-primary" style={{ padding: '0.8rem 2rem', fontSize: '1rem', boxShadow: '0 4px 15px rgba(27, 94, 32, 0.3)' }} onClick={() => showToast('บันทึกข้อมูลการเช็คชื่อสำเร็จ!', 'success')}>
           บันทึกข้อมูลวันนี้
         </button>
       </div>
