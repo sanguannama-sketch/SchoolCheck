@@ -25,6 +25,20 @@ export default function FaceScanPage() {
   const streamRef = useRef<MediaStream | null>(null);
   const [cameraError, setCameraError] = useState(false);
 
+  // Gesture instruction from checkin page
+  const gestureMap: Record<string, { emoji: string; label: string; hint: string }> = {
+    peace:    { emoji: '✌️', label: 'ชู 2 นิ้ว', hint: 'กรุณาชู 2 นิ้วให้กล้องเห็นชัด' },
+    thumbs:   { emoji: '👍', label: 'โชว์นิ้วโป้ง', hint: 'กรุณายกนิ้วโป้งขึ้น' },
+    wave:     { emoji: '👋', label: 'โบกมือ', hint: 'กรุณาโบกมือให้กล้องเห็น' },
+    fist:     { emoji: '✊', label: 'กำมือ', hint: 'กรุณากำมือแล้วยกขึ้น' },
+    openhand: { emoji: '🖐️', label: 'แบมือ 5 นิ้ว', hint: 'กรุณาแบมือทั้ง 5 นิ้ว' },
+  };
+  const [gestureId, setGestureId] = useState<string>(() => {
+    if (typeof window !== 'undefined') return localStorage.getItem('scanGesture') || 'peace';
+    return 'peace';
+  });
+  const gesture = gestureMap[gestureId] || gestureMap['peace'];
+
   useEffect(() => {
     // Camera activation logic
     if (selectedRoom && isScanning && !cameraError) {
@@ -98,6 +112,15 @@ export default function FaceScanPage() {
     };
     window.addEventListener('storage', handleStorageChange);
     return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
+
+  // Sync gesture when localStorage changes (cross-tab)
+  useEffect(() => {
+    const handleGestureChange = (e: StorageEvent) => {
+      if (e.key === 'scanGesture') setGestureId(e.newValue || 'peace');
+    };
+    window.addEventListener('storage', handleGestureChange);
+    return () => window.removeEventListener('storage', handleGestureChange);
   }, []);
 
   const executeSimulatedScan = () => {
@@ -286,6 +309,16 @@ export default function FaceScanPage() {
           transform: translateY(-2px);
           box-shadow: 0 8px 24px rgba(0, 230, 118, 0.4) !important;
         }
+        @keyframes gestureShake {
+          0%, 100% { transform: rotate(-10deg) scale(1); }
+          25% { transform: rotate(10deg) scale(1.15); }
+          50% { transform: rotate(-5deg) scale(1.08); }
+          75% { transform: rotate(8deg) scale(1.12); }
+        }
+        @keyframes pulseLive {
+          0%, 100% { box-shadow: 0 0 0 4px rgba(0,230,118,0.2); }
+          50% { box-shadow: 0 0 0 8px rgba(0,230,118,0); }
+        }
       `}} />
 
       {/* Header */}
@@ -381,7 +414,50 @@ export default function FaceScanPage() {
             )}
           </div>
 
-          <div className="glass-panel" style={{ marginTop: '2.5rem', borderRadius: '24px', padding: '1.5rem', width: '100%', maxWidth: '380px' }}>
+          {/* Gesture Instruction Banner */}
+          {selectedRoom && isScanning && !lastScanned && (
+            <div style={{
+              marginTop: '1.5rem',
+              width: '100%', maxWidth: '380px',
+              background: 'rgba(0,230,118,0.06)',
+              border: '1.5px solid rgba(0,230,118,0.25)',
+              borderRadius: '24px',
+              padding: '1.25rem 1.5rem',
+              display: 'flex', alignItems: 'center', gap: '1.25rem',
+              animation: 'successPop 0.5s ease-out backwards',
+            }}>
+              {/* Animated emoji */}
+              <div style={{
+                fontSize: '3rem', lineHeight: 1, flexShrink: 0,
+                animation: 'gestureShake 1.8s ease-in-out infinite',
+                display: 'inline-block',
+              }}>
+                {gesture.emoji}
+              </div>
+              <div>
+                <p style={{ margin: '0 0 2px 0', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(0,230,118,0.6)' }}>
+                  ทำท่าทางนี้ก่อนสแกน
+                </p>
+                <p style={{ margin: '0 0 4px 0', fontSize: '1.15rem', fontWeight: 800, color: '#fff' }}>
+                  {gesture.label}
+                </p>
+                <p style={{ margin: 0, fontSize: '0.85rem', color: '#8892b0', fontWeight: 500 }}>
+                  {gesture.hint}
+                </p>
+              </div>
+              {/* Pulsing dot */}
+              <div style={{ marginLeft: 'auto', flexShrink: 0 }}>
+                <div style={{
+                  width: '10px', height: '10px', borderRadius: '50%',
+                  background: '#00e676',
+                  boxShadow: '0 0 0 4px rgba(0,230,118,0.2)',
+                  animation: 'pulseLive 1.4s ease-in-out infinite',
+                }} />
+              </div>
+            </div>
+          )}
+
+          <div className="glass-panel" style={{ marginTop: '1.5rem', borderRadius: '24px', padding: '1.5rem', width: '100%', maxWidth: '380px' }}>
             <p style={{ color: '#8892b0', fontSize: '0.9rem', marginBottom: '1.25rem', textAlign: 'center', fontWeight: 500 }}>โหมดจำลองการสแกนใบหน้า</p>
             <form onSubmit={simulateScan} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <input
