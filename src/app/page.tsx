@@ -1,4 +1,5 @@
 import StatCard from '@/components/dashboard/StatCard';
+import AttendanceChart from '@/components/dashboard/AttendanceChart';
 
 export default function DashboardPage() {
   return (
@@ -18,9 +19,7 @@ export default function DashboardPage() {
       <div className="charts-section">
         <div className="chart-card glass">
           <h2 className="section-title">สถิติการมาเรียนรายสัปดาห์</h2>
-          <div style={{ height: '250px', background: 'rgba(255,255,255,0.3)', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed var(--accent)' }}>
-            <p style={{ color: 'var(--text-muted)' }}>[ พื้นที่สำหรับใส่กราฟ (เช่น Recharts / Chart.js) ]</p>
-          </div>
+          <AttendanceChart />
         </div>
         <div className="chart-card glass">
           <h2 className="section-title">สรุปยอดประจำวัน</h2>

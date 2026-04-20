@@ -299,14 +299,19 @@ export default function StudentsPage() {
               <div className="form-row">
                 <div className="form-group">
                   <label className="form-label">ห้องเรียน</label>
-                  <select className="form-select" value={formData.class} onChange={(e) => setFormData({ ...formData, class: e.target.value })}>
-                    <option value="ม.1/1">ม.1/1</option>
-                    <option value="ม.1/2">ม.1/2</option>
-                    <option value="ม.2/1">ม.2/1</option>
-                    <option value="ม.2/2">ม.2/2</option>
-                    <option value="ม.3/1">ม.3/1</option>
-                    <option value="ม.3/2">ม.3/2</option>
-                  </select>
+                  <input 
+                    type="text"
+                    list="class-options"
+                    className="form-input" 
+                    placeholder="เลือกหรือพิมพ์ชื่อห้อง..."
+                    value={formData.class} 
+                    onChange={(e) => setFormData({ ...formData, class: e.target.value })}
+                  />
+                  <datalist id="class-options">
+                    {Array.from(new Set([...students.map(s => s.class), 'ม.1/1', 'ม.1/2', 'ม.2/1', 'ม.2/2', 'ม.3/1', 'ม.3/2'])).map(c => (
+                      <option key={c} value={c} />
+                    ))}
+                  </datalist>
                 </div>
                 <div className="form-group">
                   <label className="form-label">เพศ</label>
