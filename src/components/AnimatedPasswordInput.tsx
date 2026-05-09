@@ -60,13 +60,14 @@ export default function AnimatedPasswordInput({
           position: 'absolute',
           inset: '-2px',
           borderRadius: '18px',
-          background: isFocused 
+          backgroundImage: isFocused 
             ? `linear-gradient(120deg, #81c784, #4caf50, #81c784)` 
-            : 'transparent',
+            : 'none',
+          backgroundColor: 'transparent',
           backgroundSize: '200% 200%',
           animation: isFocused ? 'gradientMove 3s ease infinite' : 'none',
           opacity: isFocused ? 0.7 : 0,
-          transition: 'opacity 0.4s ease, background 0.4s ease',
+          transition: 'opacity 0.4s ease, background-image 0.4s ease',
           zIndex: 0,
           filter: 'blur(4px)'
         }}></div>
