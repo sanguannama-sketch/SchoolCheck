@@ -31,41 +31,37 @@ const initialStudents: Student[] = [
 ];
 
 export default function CheckinPage() {
-  const [students, setStudents] = useState<Student[]>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('studentsData');
-      if (saved) return JSON.parse(saved);
-      localStorage.setItem('studentsData', JSON.stringify(initialStudents));
-    }
-    return initialStudents;
-  });
+  const API_URL = 'http://localhost:5000/api/students';
+  const [students, setStudents] = useState<Student[]>([]);
+  const [isClient, setIsClient] = useState(false);
 
-  // Sync state across tabs & internal events
+  const fetchStudents = async () => {
+    try {
+      const res = await fetch(API_URL);
+      const data = await res.json();
+      setStudents(data);
+      // Keep localStorage in sync for scan page real-time feedback
+      localStorage.setItem('studentsData', JSON.stringify(data));
+      window.dispatchEvent(new Event('studentsDataChanged'));
+    } catch (e) {
+      console.error('Failed to load students from DB:', e);
+    }
+  };
+
   useEffect(() => {
-    const handleStorage = (e: StorageEvent | Event) => {
-      if (e instanceof StorageEvent && e.key === 'studentsData' && e.newValue) {
-        setStudents(JSON.parse(e.newValue));
-      } else if (e.type === 'studentsDataChanged') {
-        const saved = localStorage.getItem('studentsData');
-        if (saved) setStudents(JSON.parse(saved));
-      }
-    };
-    window.addEventListener('storage', handleStorage);
-    window.addEventListener('studentsDataChanged', handleStorage);
-    return () => {
-      window.removeEventListener('storage', handleStorage);
-      window.removeEventListener('studentsDataChanged', handleStorage);
-    };
+    setIsClient(true);
+    fetchStudents();
+    // Poll every 5 seconds for real-time check-in updates from scan page
+    const interval = setInterval(fetchStudents, 5000);
+    return () => clearInterval(interval);
   }, []);
 
-  const updateStudents = (updater: (prev: Student[]) => Student[]) => {
-    setStudents(prev => {
-      const newStudents = updater(prev);
-      localStorage.setItem('studentsData', JSON.stringify(newStudents));
-      // Dispatch a custom event for same-tab updates (optional, but good practice)
-      window.dispatchEvent(new Event('studentsDataChanged'));
-      return newStudents;
-    });
+  const updateStudents = async (updater: (prev: Student[]) => Student[]) => {
+    const newStudents = updater(students);
+    setStudents(newStudents);
+    // Persist changes in localStorage for same-device tabs
+    localStorage.setItem('studentsData', JSON.stringify(newStudents));
+    window.dispatchEvent(new Event('studentsDataChanged'));
   };
   const [classFilter, setClassFilter] = useState('ม.1/1');
   const [isScanActive, setIsScanActive] = useState(false);
@@ -178,17 +174,39 @@ export default function CheckinPage() {
 
   const classes = Array.from(new Set(students.map(s => s.class)));
 
-  const handleStatusChange = (studentId: number, newStatus: 'present' | 'absent' | 'late') => {
+  const handleStatusChange = async (studentId: number, newStatus: 'present' | 'absent' | 'late') => {
+    // Optimistic update
     updateStudents(prev => prev.map(s => s.id === studentId ? { ...s, status: newStatus } : s));
+    // Save to database
+    try {
+      await fetch(`${API_URL}/${studentId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus })
+      });
+    } catch (e) {
+      console.error('Failed to update status in DB:', e);
+    }
   };
   
-  const handleMarkAllPresent = () => {
-    updateStudents(prev => prev.map(s => {
-      if (s.class === classFilter) {
-        return { ...s, status: 'present' };
-      }
-      return s;
-    }));
+  const handleMarkAllPresent = async () => {
+    const updated = students.map(s => s.class === classFilter ? { ...s, status: 'present' as const } : s);
+    setStudents(updated);
+    localStorage.setItem('studentsData', JSON.stringify(updated));
+    window.dispatchEvent(new Event('studentsDataChanged'));
+    // Save each changed student to database
+    const classStudents = students.filter(s => s.class === classFilter);
+    try {
+      await Promise.all(classStudents.map(s =>
+        fetch(`${API_URL}/${s.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'present' })
+        })
+      ));
+    } catch (e) {
+      console.error('Failed to mark all present in DB:', e);
+    }
   };
 
   const statusBadge = (status: string) => {
@@ -204,6 +222,8 @@ export default function CheckinPage() {
       </span>
     );
   };
+
+  if (!isClient) return null;
 
   return (
     <div style={{ animation: "fadeUp 0.6s ease-out backwards" }}>
