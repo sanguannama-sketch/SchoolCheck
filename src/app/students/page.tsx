@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from 'react';
+import { useToast } from '@/components/Toast';
 
 interface Student {
   id: number;
@@ -41,12 +42,16 @@ const initialStudents: Student[] = [
 ];
 
 export default function StudentsPage() {
+  const { showToast } = useToast();
   const [students, setStudents] = useState<Student[]>(initialStudents);
   const [searchTerm, setSearchTerm] = useState('');
   const [classFilter, setClassFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [showModal, setShowModal] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
   const [formData, setFormData] = useState({ name: '', nickname: '', class: 'ม.1/1', gender: 'male' });
+  const [viewStudent, setViewStudent] = useState<Student | null>(null);
+  const [studentToDelete, setStudentToDelete] = useState<Student | null>(null);
   
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
@@ -68,23 +73,54 @@ export default function StudentsPage() {
   const totalAbsent = students.filter(s => s.status === 'absent').length;
   const totalLate = students.filter(s => s.status === 'late').length;
 
-  const handleAddStudent = () => {
+  const handleSaveStudent = () => {
     if (!formData.name.trim()) return;
-    const randomColor = avatarColors[students.length % avatarColors.length];
-    const newStudent: Student = {
-      id: students.length + 1,
-      name: formData.name,
-      nickname: formData.nickname || formData.name.charAt(0),
-      class: formData.class,
-      number: students.length + 1,
-      gender: formData.gender,
-      status: 'present',
-      avatarColor: randomColor.bg,
-      iconColor: randomColor.color,
-    };
-    setStudents([...students, newStudent]);
+
+    if (editingId) {
+      setStudents(students.map(s => s.id === editingId ? { ...s, name: formData.name, nickname: formData.nickname || formData.name.charAt(0), class: formData.class, gender: formData.gender } : s));
+      showToast('อัปเดตข้อมูลนักเรียนเรียบร้อยแล้ว', 'success');
+    } else {
+      const randomColor = avatarColors[students.length % avatarColors.length];
+      const newStudent: Student = {
+        id: students.length > 0 ? Math.max(...students.map(s => s.id)) + 1 : 1,
+        name: formData.name,
+        nickname: formData.nickname || formData.name.charAt(0),
+        class: formData.class,
+        number: students.length > 0 ? Math.max(...students.map(s => s.number)) + 1 : 1,
+        gender: formData.gender,
+        status: 'present',
+        avatarColor: randomColor.bg,
+        iconColor: randomColor.color,
+      };
+      setStudents([...students, newStudent]);
+      showToast('เพิ่มนักเรียนใหม่เรียบร้อยแล้ว', 'success');
+    }
+
     setFormData({ name: '', nickname: '', class: 'ม.1/1', gender: 'male' });
     setShowModal(false);
+    setEditingId(null);
+  };
+
+  const handleEditClick = (student: Student) => {
+    setEditingId(student.id);
+    setFormData({ name: student.name, nickname: student.nickname, class: student.class, gender: student.gender });
+    setShowModal(true);
+  };
+
+  const handleDeleteClick = (student: Student) => {
+    setStudentToDelete(student);
+  };
+
+  const confirmDelete = () => {
+    if (studentToDelete) {
+      setStudents(students.filter(s => s.id !== studentToDelete.id));
+      showToast(`ลบข้อมูล ${studentToDelete.name} เรียบร้อยแล้ว`, 'info');
+      setStudentToDelete(null);
+    }
+  };
+
+  const handleViewClick = (student: Student) => {
+    setViewStudent(student);
   };
 
   const statusBadge = (status: string) => {
@@ -115,7 +151,11 @@ export default function StudentsPage() {
           </h1>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>ข้อมูลนักเรียนทั้งหมดในระบบ SchoolCheck</p>
         </div>
-        <button className="btn-primary" style={{ boxShadow: '0 4px 15px rgba(27, 94, 32, 0.2)' }} onClick={() => setShowModal(true)}>
+        <button className="btn-primary" style={{ boxShadow: '0 4px 15px rgba(27, 94, 32, 0.2)' }} onClick={() => {
+          setEditingId(null);
+          setFormData({ name: '', nickname: '', class: 'ม.1/1', gender: 'male' });
+          setShowModal(true);
+        }}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
           เพิ่มนักเรียนใหม่
         </button>
@@ -228,13 +268,13 @@ export default function StudentsPage() {
                 <td data-label="สถานะวันนี้">{statusBadge(student.status)}</td>
                 <td data-label="จัดการ" style={{ textAlign: 'center' }}>
                   <div style={{ display: 'flex', gap: '0.25rem', justifyContent: 'center' }}>
-                    <button className="btn-icon" aria-label="View" title="ดูรายละเอียด" style={{ padding: '0.35rem' }}>
+                    <button className="btn-icon" aria-label="View" title="ดูรายละเอียด" style={{ padding: '0.35rem' }} onClick={() => handleViewClick(student)}>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
                     </button>
-                    <button className="btn-icon" aria-label="Edit" title="แก้ไข" style={{ padding: '0.35rem' }}>
+                    <button className="btn-icon" aria-label="Edit" title="แก้ไข" style={{ padding: '0.35rem' }} onClick={() => handleEditClick(student)}>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="16 3 21 8 8 21 3 21 3 16 16 3"></polygon></svg>
                     </button>
-                    <button className="btn-icon" aria-label="Delete" title="ลบ" style={{ color: '#e57373', padding: '0.35rem' }}>
+                    <button className="btn-icon" aria-label="Delete" title="ลบ" style={{ color: '#e57373', padding: '0.35rem' }} onClick={() => handleDeleteClick(student)}>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
                     </button>
                   </div>
@@ -282,7 +322,7 @@ export default function StudentsPage() {
         <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowModal(false); }}>
           <div className="modal-content">
             <div className="modal-header">
-              <h2>เพิ่มนักเรียนใหม่</h2>
+              <h2>{editingId ? 'แก้ไขข้อมูลนักเรียน' : 'เพิ่มนักเรียนใหม่'}</h2>
               <button className="modal-close" onClick={() => setShowModal(false)}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
               </button>
@@ -324,10 +364,72 @@ export default function StudentsPage() {
             </div>
             <div className="modal-footer">
               <button className="btn-secondary" onClick={() => setShowModal(false)}>ยกเลิก</button>
-              <button className="btn-primary" onClick={handleAddStudent} disabled={!formData.name.trim()}>
+              <button className="btn-primary" onClick={handleSaveStudent} disabled={!formData.name.trim()}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
                 บันทึก
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========== VIEW STUDENT MODAL ========== */}
+      {viewStudent && (
+        <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setViewStudent(null); }}>
+          <div className="modal-content" style={{ maxWidth: '450px' }}>
+            <div className="modal-header">
+              <h2>ข้อมูลนักเรียน</h2>
+              <button className="modal-close" onClick={() => setViewStudent(null)}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+              </button>
+            </div>
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.5rem', padding: '2rem 1.5rem' }}>
+              <div style={{ width: '100px', height: '100px', borderRadius: '50%', background: viewStudent.avatarColor, color: viewStudent.iconColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '3rem', border: '4px solid white', boxShadow: '0 8px 24px rgba(0,0,0,0.1)' }}>
+                {viewStudent.name.charAt(0)}
+              </div>
+              
+              <div style={{ textAlign: 'center', width: '100%' }}>
+                <h3 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '0.25rem' }}>{viewStudent.name}</h3>
+                <p style={{ color: 'var(--text-muted)', fontSize: '1rem', marginBottom: '1.25rem' }}>ชื่อเล่น: {viewStudent.nickname}</p>
+                
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', textAlign: 'left', background: 'rgba(255,255,255,0.5)', padding: '1rem', borderRadius: '16px', border: '1px solid rgba(0,0,0,0.05)' }}>
+                  <div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>ห้องเรียน</div>
+                    <div style={{ fontWeight: 600, color: 'var(--text-main)' }}>{viewStudent.class}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>เลขที่</div>
+                    <div style={{ fontWeight: 600, color: 'var(--text-main)' }}>{viewStudent.number}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>เพศ</div>
+                    <div style={{ fontWeight: 600, color: 'var(--text-main)' }}>{viewStudent.gender === 'male' ? 'ชาย' : 'หญิง'}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>สถานะวันนี้</div>
+                    <div>{statusBadge(viewStudent.status)}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========== DELETE CONFIRMATION MODAL ========== */}
+      {studentToDelete && (
+        <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setStudentToDelete(null); }}>
+          <div className="modal-content" style={{ maxWidth: '400px', textAlign: 'center', padding: '2rem' }}>
+            <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: '#ffebee', color: '#d32f2f', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem' }}>
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+            </div>
+            <h2 style={{ marginBottom: '0.5rem', color: 'var(--text-main)' }}>ยืนยันการลบข้อมูล</h2>
+            <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem', lineHeight: 1.5 }}>
+              คุณแน่ใจหรือไม่ว่าต้องการลบข้อมูลของ <b>{studentToDelete.name}</b>?<br/>การกระทำนี้ไม่สามารถย้อนกลับได้
+            </p>
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+              <button className="btn-secondary" onClick={() => setStudentToDelete(null)} style={{ flex: 1 }}>ยกเลิก</button>
+              <button className="btn-primary" onClick={confirmDelete} style={{ flex: 1, background: '#d32f2f', boxShadow: '0 4px 12px rgba(211, 47, 47, 0.2)' }}>ลบข้อมูล</button>
             </div>
           </div>
         </div>
