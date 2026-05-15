@@ -28,6 +28,8 @@ export default function FaceScanPage() {
   const [cameraError, setCameraError] = useState(false);
   const [modelsLoaded, setModelsLoaded] = useState(false);
   const faceapiRef = useRef<any>(null);
+  // Pending match: face detected, waiting for user confirmation
+  const [pendingMatch, setPendingMatch] = useState<{ name: string; id: string; class: string } | null>(null);
 
   useEffect(() => {
     const loadModels = async () => {
@@ -205,55 +207,19 @@ export default function FaceScanPage() {
               }
             }
 
-            if (finalName) {
-              console.log("Real face recognized!");
+            if (finalName && finalId) {
+              console.log("Face recognized, awaiting confirmation:", finalName);
               setIsScanning(false);
-              
-              // === REAL-TIME SYNC ===
-              if (finalId) {
-                const today = new Date().toISOString().split('T')[0];
-                const time = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-                // 1. Update Student status in DB
-                fetch(`http://localhost:5000/api/students/${finalId}`, {
-                  method: 'PUT',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ status: 'present' })
-                }).catch(err => console.error("Failed to sync check-in to database:", err));
-
-                // 2. Record Attendance history
-                const studentsDataStr = localStorage.getItem('studentsData');
-                let matchedStudent: any = null;
-                if (studentsDataStr) {
-                  const allStudents = JSON.parse(studentsDataStr);
-                  matchedStudent = allStudents.find((s: any) => s.id.toString() === finalId);
-                }
-                fetch('http://localhost:5000/api/attendance', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    date: today,
-                    studentId: parseInt(finalId),
-                    studentName: finalName,
-                    class: matchedStudent?.class || '',
-                    status: 'present',
-                    checkinTime: time,
-                    method: 'face'
-                  })
-                }).catch(err => console.error("Failed to record attendance:", err));
-
-                // 3. Update LocalStorage for instant UI feedback
-                if (studentsDataStr) {
-                  let studentsData = JSON.parse(studentsDataStr);
-                  studentsData = studentsData.map((s: any) => 
-                    s.id.toString() === finalId ? { ...s, status: 'present' } : s
-                  );
-                  localStorage.setItem('studentsData', JSON.stringify(studentsData));
-                  window.dispatchEvent(new Event('studentsDataChanged'));
-                }
+              // Find student class from localStorage
+              const studentsDataStr = localStorage.getItem('studentsData');
+              let cls = '';
+              if (studentsDataStr) {
+                const allStudents = JSON.parse(studentsDataStr);
+                cls = allStudents.find((s: any) => s.id.toString() === finalId)?.class || '';
               }
-
-              executeSimulatedScan(true, finalName);
+              // Show confirmation card instead of checking in immediately
+              setPendingMatch({ name: finalName, id: finalId, class: cls });
             }
           }
         } catch (e) {
@@ -273,6 +239,46 @@ export default function FaceScanPage() {
     const a = Math.sin(dp/2) * Math.sin(dp/2) + Math.cos(p1) * Math.cos(p2) * Math.sin(dl/2) * Math.sin(dl/2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
     return R * c; 
+  };
+
+  // Called when student presses "ยืนยัน" (Confirm) button
+  const confirmCheckin = () => {
+    if (!pendingMatch) return;
+    const { name, id, class: cls } = pendingMatch;
+    const today = new Date().toISOString().split('T')[0];
+    const time = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+    // 1. Update Student status in DB
+    fetch(`http://localhost:5000/api/students/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'present' })
+    }).catch(err => console.error('Failed to update student:', err));
+
+    // 2. Record Attendance
+    fetch('http://localhost:5000/api/attendance', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date: today, studentId: parseInt(id), studentName: name, class: cls, status: 'present', checkinTime: time, method: 'face' })
+    }).catch(err => console.error('Failed to record attendance:', err));
+
+    // 3. Update LocalStorage for real-time checkin page sync
+    const studentsDataStr = localStorage.getItem('studentsData');
+    if (studentsDataStr) {
+      let studentsData = JSON.parse(studentsDataStr);
+      studentsData = studentsData.map((s: any) => s.id.toString() === id ? { ...s, status: 'present' } : s);
+      localStorage.setItem('studentsData', JSON.stringify(studentsData));
+      window.dispatchEvent(new Event('studentsDataChanged'));
+    }
+
+    setPendingMatch(null);
+    executeSimulatedScan(true, name);
+  };
+
+  // Called when student presses "ไม่ใช่ฉัน" (Cancel) button
+  const cancelMatch = () => {
+    setPendingMatch(null);
+    setIsScanning(true);
   };
 
   const simulateScan = (e?: React.FormEvent) => {
@@ -525,6 +531,47 @@ export default function FaceScanPage() {
                     </div>
                   </button>
                 )}
+              </div>
+            )}
+
+            {/* ✅ Confirmation Overlay — ยืนยันตัวตนก่อนเช็คชื่อ */}
+            {pendingMatch && (
+              <div className="success-overlay" style={{ zIndex: 40 }}>
+                {/* Avatar */}
+                <div style={{ width: 80, height: 80, borderRadius: '50%', background: 'linear-gradient(135deg, #1b5e20, #43a047)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2.2rem', fontWeight: 700, color: 'white', marginBottom: '1rem', boxShadow: '0 8px 32px rgba(76,175,80,0.45)' }}>
+                  {pendingMatch.name.charAt(0)}
+                </div>
+                {/* Name & class */}
+                <p style={{ color: '#81c784', fontSize: '0.82rem', fontWeight: 600, margin: '0 0 0.3rem', letterSpacing: '0.05em', textTransform: 'uppercase' }}>พบใบหน้าในระบบ</p>
+                <h2 style={{ fontSize: '1.55rem', fontWeight: 800, color: '#fff', margin: '0 0 0.3rem', textAlign: 'center' }}>{pendingMatch.name}</h2>
+                {pendingMatch.class && (
+                  <span style={{ fontSize: '0.88rem', color: '#b2dfdb', background: 'rgba(76,175,80,0.15)', padding: '0.2rem 0.75rem', borderRadius: '20px', marginBottom: '1.5rem', display: 'inline-block' }}>
+                    ห้อง {pendingMatch.class}
+                  </span>
+                )}
+                <p style={{ color: '#cfd8dc', fontSize: '0.9rem', textAlign: 'center', marginBottom: '1.5rem', marginTop: '0.5rem' }}>
+                  นี่คือคุณใช่ไหม?
+                </p>
+                {/* Buttons */}
+                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+                  <button
+                    onClick={confirmCheckin}
+                    style={{ padding: '0.7rem 1.8rem', borderRadius: '14px', background: '#43a047', border: 'none', color: 'white', fontSize: '1rem', fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 16px rgba(67,160,71,0.4)', display: 'flex', alignItems: 'center', gap: '0.4rem', transition: 'transform 0.15s' }}
+                    onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.04)')}
+                    onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
+                    ใช่ เช็คชื่อเลย!
+                  </button>
+                  <button
+                    onClick={cancelMatch}
+                    style={{ padding: '0.7rem 1.4rem', borderRadius: '14px', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', color: '#cfd8dc', fontSize: '0.95rem', fontWeight: 600, cursor: 'pointer', transition: 'transform 0.15s' }}
+                    onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.04)')}
+                    onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
+                  >
+                    ไม่ใช่ฉัน
+                  </button>
+                </div>
               </div>
             )}
 
