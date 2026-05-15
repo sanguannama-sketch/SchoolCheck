@@ -211,22 +211,45 @@ export default function FaceScanPage() {
               
               // === REAL-TIME SYNC ===
               if (finalId) {
-                // 1. Update Backend Database
+                const today = new Date().toISOString().split('T')[0];
+                const time = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+                // 1. Update Student status in DB
                 fetch(`http://localhost:5000/api/students/${finalId}`, {
                   method: 'PUT',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ status: 'present' })
                 }).catch(err => console.error("Failed to sync check-in to database:", err));
 
-                // 2. Update LocalStorage for instant UI feedback on Checkin page
+                // 2. Record Attendance history
                 const studentsDataStr = localStorage.getItem('studentsData');
+                let matchedStudent: any = null;
+                if (studentsDataStr) {
+                  const allStudents = JSON.parse(studentsDataStr);
+                  matchedStudent = allStudents.find((s: any) => s.id.toString() === finalId);
+                }
+                fetch('http://localhost:5000/api/attendance', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    date: today,
+                    studentId: parseInt(finalId),
+                    studentName: finalName,
+                    class: matchedStudent?.class || '',
+                    status: 'present',
+                    checkinTime: time,
+                    method: 'face'
+                  })
+                }).catch(err => console.error("Failed to record attendance:", err));
+
+                // 3. Update LocalStorage for instant UI feedback
                 if (studentsDataStr) {
                   let studentsData = JSON.parse(studentsDataStr);
                   studentsData = studentsData.map((s: any) => 
                     s.id.toString() === finalId ? { ...s, status: 'present' } : s
                   );
                   localStorage.setItem('studentsData', JSON.stringify(studentsData));
-                  window.dispatchEvent(new Event('studentsDataChanged')); // Fire event for same-tab listeners
+                  window.dispatchEvent(new Event('studentsDataChanged'));
                 }
               }
 

@@ -102,6 +102,77 @@ app.put('/api/students/:id/face', async (req, res) => {
   }
 });
 
+// === Attendance APIs ===
+const Attendance = require('./models/Attendance');
+
+// POST: บันทึกการเช็คชื่อ (สร้างหรืออัปเดตถ้ามีแล้ว)
+app.post('/api/attendance', async (req, res) => {
+  try {
+    const { date, studentId, studentName, class: cls, status, checkinTime, method } = req.body;
+    
+    // upsert: ถ้ามีแล้ว → อัปเดต, ถ้าไม่มี → สร้างใหม่
+    const record = await Attendance.findOneAndUpdate(
+      { date, studentId },
+      { date, studentId, studentName, class: cls, status, checkinTime, method },
+      { new: true, upsert: true }
+    );
+    res.status(201).json(record);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// GET: ดึงประวัติตามวันที่ (เช่น /api/attendance?date=2026-05-15&class=ม.1/1)
+app.get('/api/attendance', async (req, res) => {
+  try {
+    const { date, class: cls } = req.query;
+    const filter = {};
+    if (date) filter.date = date;
+    if (cls) filter.class = cls;
+    
+    const records = await Attendance.find(filter).sort({ checkinTime: 1 });
+    res.json(records);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// GET: ดึงประวัติรายนักเรียน (เช่น /api/attendance/student/5)
+app.get('/api/attendance/student/:studentId', async (req, res) => {
+  try {
+    const records = await Attendance.find({ studentId: req.params.studentId })
+      .sort({ date: -1 })
+      .limit(30); // แสดงย้อนหลัง 30 วัน
+    res.json(records);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// GET: สรุปสถิติตามช่วงวันที่ (เช่น /api/attendance/summary?startDate=2026-05-01&endDate=2026-05-15)
+app.get('/api/attendance/summary', async (req, res) => {
+  try {
+    const { startDate, endDate, class: cls } = req.query;
+    const filter = {};
+    if (startDate && endDate) filter.date = { $gte: startDate, $lte: endDate };
+    if (cls) filter.class = cls;
+
+    const records = await Attendance.find(filter);
+
+    // จัดกลุ่มตามวันที่
+    const summary = {};
+    records.forEach(r => {
+      if (!summary[r.date]) summary[r.date] = { date: r.date, present: 0, absent: 0, late: 0, total: 0 };
+      summary[r.date][r.status]++;
+      summary[r.date].total++;
+    });
+
+    res.json(Object.values(summary).sort((a, b) => b.date.localeCompare(a.date)));
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // รันเซิร์ฟเวอร์
 app.listen(PORT, () => {
   console.log(`🚀 Server is running on http://localhost:${PORT}`);

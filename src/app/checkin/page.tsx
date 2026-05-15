@@ -174,16 +174,43 @@ export default function CheckinPage() {
 
   const classes = Array.from(new Set(students.map(s => s.class)));
 
+  const ATTENDANCE_URL = 'http://localhost:5000/api/attendance';
+
+  const recordAttendance = async (student: any, status: string, method = 'manual') => {
+    const today = new Date().toISOString().split('T')[0]; // "2026-05-15"
+    const time = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    try {
+      await fetch(ATTENDANCE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          date: today,
+          studentId: student.id,
+          studentName: student.name,
+          class: student.class,
+          status,
+          checkinTime: time,
+          method
+        })
+      });
+    } catch (e) {
+      console.error('Failed to record attendance:', e);
+    }
+  };
+
   const handleStatusChange = async (studentId: number, newStatus: 'present' | 'absent' | 'late') => {
+    const student = students.find(s => s.id === studentId);
     // Optimistic update
     updateStudents(prev => prev.map(s => s.id === studentId ? { ...s, status: newStatus } : s));
-    // Save to database
+    // Save to Student DB
     try {
       await fetch(`${API_URL}/${studentId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus })
       });
+      // Record attendance history
+      if (student) await recordAttendance(student, newStatus, 'manual');
     } catch (e) {
       console.error('Failed to update status in DB:', e);
     }
@@ -194,7 +221,6 @@ export default function CheckinPage() {
     setStudents(updated);
     localStorage.setItem('studentsData', JSON.stringify(updated));
     window.dispatchEvent(new Event('studentsDataChanged'));
-    // Save each changed student to database
     const classStudents = students.filter(s => s.class === classFilter);
     try {
       await Promise.all(classStudents.map(s =>
@@ -204,6 +230,8 @@ export default function CheckinPage() {
           body: JSON.stringify({ status: 'present' })
         })
       ));
+      // Record attendance history for each student
+      await Promise.all(classStudents.map(s => recordAttendance(s, 'present', 'manual')));
     } catch (e) {
       console.error('Failed to mark all present in DB:', e);
     }
