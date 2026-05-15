@@ -26,25 +26,39 @@ export default function FaceScanPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [cameraError, setCameraError] = useState(false);
+  const [modelsLoaded, setModelsLoaded] = useState(false);
+  const faceapiRef = useRef<any>(null);
 
-  // Gesture instruction from checkin page
-  const gestureMap: Record<string, { emoji: string; label: string; hint: string }> = {
-    peace:    { emoji: '✌️', label: 'ชู 2 นิ้ว', hint: 'กรุณาชู 2 นิ้วให้กล้องเห็นชัด' },
-    thumbs:   { emoji: '👍', label: 'โชว์นิ้วโป้ง', hint: 'กรุณายกนิ้วโป้งขึ้น' },
-    wave:     { emoji: '👋', label: 'โบกมือ', hint: 'กรุณาโบกมือให้กล้องเห็น' },
-    fist:     { emoji: '✊', label: 'กำมือ', hint: 'กรุณากำมือแล้วยกขึ้น' },
-    openhand: { emoji: '🖐️', label: 'แบมือ 5 นิ้ว', hint: 'กรุณาแบมือทั้ง 5 นิ้ว' },
-  };
-  const [gestureId, setGestureId] = useState<string>(() => {
-    if (typeof window !== 'undefined') return localStorage.getItem('scanGesture') || 'peace';
-    return 'peace';
-  });
-  const gesture = gestureMap[gestureId] || gestureMap['peace'];
+  useEffect(() => {
+    const loadModels = async () => {
+      try {
+        const faceapi = await import('face-api.js');
+        faceapiRef.current = faceapi;
+        await Promise.all([
+          faceapi.nets.tinyFaceDetector.loadFromUri('/models'),
+          faceapi.nets.faceLandmark68Net.loadFromUri('/models'),
+          faceapi.nets.faceRecognitionNet.loadFromUri('/models')
+        ]);
+        setModelsLoaded(true);
+        console.log("Face models loaded successfully");
+      } catch (err) {
+        console.error("Error loading face models:", err);
+      }
+    };
+    loadModels();
+  }, []);
+
 
   useEffect(() => {
     // Camera activation logic
     if (selectedRoom && isScanning && !cameraError) {
       if (!streamRef.current) {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          console.error("mediaDevices API not supported");
+          setCameraError(true);
+          showToast("เบราว์เซอร์นี้ไม่รองรับการเปิดกล้อง", "error");
+          return;
+        }
         navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })
           .then((stream) => {
             streamRef.current = stream;
@@ -55,6 +69,16 @@ export default function FaceScanPage() {
           .catch((err) => {
             console.error("Camera access error:", err);
             setCameraError(true);
+            
+            if (err.name === 'NotAllowedError') {
+              showToast("กรุณาอนุญาตให้สิทธิ์เข้าถึงกล้องในเบราว์เซอร์", "error");
+            } else if (err.name === 'NotFoundError') {
+              showToast("ไม่พบกล้องในอุปกรณ์นี้", "error");
+            } else if (err.name === 'NotReadableError') {
+              showToast("กล้องกำลังถูกใช้งานโดยแอปพลิเคชันอื่น", "error");
+            } else {
+              showToast("ไม่สามารถเปิดกล้องได้: " + err.message, "error");
+            }
           });
       }
     } else {
@@ -116,19 +140,11 @@ export default function FaceScanPage() {
     return () => window.removeEventListener('storage', handleStorageChange);
   }, []);
 
-  // Sync gesture when localStorage changes (cross-tab)
-  useEffect(() => {
-    const handleGestureChange = (e: StorageEvent) => {
-      if (e.key === 'scanGesture') setGestureId(e.newValue || 'peace');
-    };
-    window.addEventListener('storage', handleGestureChange);
-    return () => window.removeEventListener('storage', handleGestureChange);
-  }, []);
 
-  const executeSimulatedScan = () => {
-    const isLate = Math.random() > 0.7; // 30% chance of being marked late
-    const fallbackName = isLate ? 'เด็กชาย มาสาย ปกติ' : 'เด็กหญิง ตั้งใจ เรียนดี';
-    const finalName = manualName.trim() !== '' ? manualName : fallbackName;
+  const executeSimulatedScan = (forceSuccess = false, matchedName?: string) => {
+    const isLate = forceSuccess ? false : Math.random() > 0.7; // 30% chance of being marked late
+    const fallbackName = forceSuccess ? 'ผู้ใช้งานทั่วไป' : (isLate ? 'เด็กชาย มาสาย ปกติ' : 'เด็กหญิง ตั้งใจ เรียนดี');
+    const finalName = matchedName || (manualName.trim() !== '' ? manualName : fallbackName);
     
     const mockStudent: ScanLog = {
       id: Math.random().toString(36).substring(7),
@@ -149,6 +165,57 @@ export default function FaceScanPage() {
       setIsScanning(true);
     }, 3000);
   };
+
+  // Real face detection interval
+  useEffect(() => {
+    let interval: any;
+    if (modelsLoaded && isScanning && selectedRoom && videoRef.current && !cameraError) {
+      interval = setInterval(async () => {
+        if (!videoRef.current || !faceapiRef.current || !isScanning) return;
+        const faceapi = faceapiRef.current;
+        try {
+          const detections = await faceapi.detectAllFaces(
+            videoRef.current,
+            new faceapi.TinyFaceDetectorOptions()
+          ).withFaceLandmarks().withFaceDescriptors();
+
+          if (detections.length > 0) {
+            const descriptor = detections[0].descriptor;
+            
+            // Search in registered faces
+            const savedFacesStr = localStorage.getItem('registeredFaces');
+            let finalName = null;
+            if (savedFacesStr) {
+              const savedFaces = JSON.parse(savedFacesStr);
+              let bestMatch = { id: null as string | null, name: null as string | null, distance: 1.0 };
+              
+              for (const [id, data] of Object.entries(savedFaces)) {
+                const dist = faceapi.euclideanDistance(descriptor, new Float32Array((data as any).descriptor));
+                if (dist < bestMatch.distance) {
+                  bestMatch = { id, name: (data as any).name, distance: dist };
+                }
+              }
+
+              // Euclidean distance < 0.5 is generally a good threshold for face-api
+              if (bestMatch.distance < 0.55 && bestMatch.name) {
+                 console.log("Matched face:", bestMatch.name, "with distance:", bestMatch.distance);
+                 finalName = bestMatch.name;
+              }
+            }
+
+            if (finalName) {
+              console.log("Real face recognized!");
+              setIsScanning(false);
+              executeSimulatedScan(true, finalName);
+            }
+          }
+        } catch (e) {
+          console.error("Detection error:", e);
+        }
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [modelsLoaded, isScanning, selectedRoom, cameraError]);
 
   const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
     const R = 6371e3;
@@ -390,10 +457,28 @@ export default function FaceScanPage() {
                 style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', zIndex: 0, filter: 'brightness(0.8) contrast(1.1)' }} 
               />
             ) : (
-              <svg width="200" height="200" viewBox="0 0 24 24" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.1)" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" style={{ zIndex: 1 }}>
-                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                <circle cx="12" cy="7" r="4"></circle>
-              </svg>
+              <div style={{ zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
+                <svg width="150" height="150" viewBox="0 0 24 24" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.1)" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                  <circle cx="12" cy="7" r="4"></circle>
+                </svg>
+                {cameraError && (
+                  <button 
+                    onClick={() => {
+                      setCameraError(false);
+                      showToast("กำลังพยายามเปิดกล้องอีกครั้ง...", "info");
+                    }} 
+                    style={{ padding: '0.6rem 1.2rem', background: 'rgba(239, 83, 80, 0.2)', border: '1px solid rgba(239, 83, 80, 0.5)', color: '#ef5350', borderRadius: '12px', cursor: 'pointer', fontWeight: 600, transition: 'all 0.2s', zIndex: 50 }}
+                    onMouseOver={(e) => e.currentTarget.style.background = 'rgba(239, 83, 80, 0.3)'}
+                    onMouseOut={(e) => e.currentTarget.style.background = 'rgba(239, 83, 80, 0.2)'}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"></path><path d="M16 21v-5h5"></path></svg>
+                      ลองเปิดกล้องอีกครั้ง
+                    </div>
+                  </button>
+                )}
+              </div>
             )}
 
             {/* Success/Error Overlay Pop-up */}
@@ -416,48 +501,6 @@ export default function FaceScanPage() {
             )}
           </div>
 
-          {/* Gesture Instruction Banner */}
-          {selectedRoom && isScanning && !lastScanned && (
-            <div style={{
-              marginTop: '1.5rem',
-              width: '100%', maxWidth: '380px',
-              background: 'rgba(0,230,118,0.06)',
-              border: '1.5px solid rgba(0,230,118,0.25)',
-              borderRadius: '24px',
-              padding: '1.25rem 1.5rem',
-              display: 'flex', alignItems: 'center', gap: '1.25rem',
-              animation: 'successPop 0.5s ease-out backwards',
-            }}>
-              {/* Animated emoji */}
-              <div style={{
-                fontSize: '3rem', lineHeight: 1, flexShrink: 0,
-                animation: 'gestureShake 1.8s ease-in-out infinite',
-                display: 'inline-block',
-              }}>
-                {gesture.emoji}
-              </div>
-              <div>
-                <p style={{ margin: '0 0 2px 0', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(0,230,118,0.6)' }}>
-                  ทำท่าทางนี้ก่อนสแกน
-                </p>
-                <p style={{ margin: '0 0 4px 0', fontSize: '1.15rem', fontWeight: 800, color: '#fff' }}>
-                  {gesture.label}
-                </p>
-                <p style={{ margin: 0, fontSize: '0.85rem', color: '#8892b0', fontWeight: 500 }}>
-                  {gesture.hint}
-                </p>
-              </div>
-              {/* Pulsing dot */}
-              <div style={{ marginLeft: 'auto', flexShrink: 0 }}>
-                <div style={{
-                  width: '10px', height: '10px', borderRadius: '50%',
-                  background: '#00e676',
-                  boxShadow: '0 0 0 4px rgba(0,230,118,0.2)',
-                  animation: 'pulseLive 1.4s ease-in-out infinite',
-                }} />
-              </div>
-            </div>
-          )}
 
           <div className="glass-panel" style={{ marginTop: '1.5rem', borderRadius: '24px', padding: '1.5rem', width: '100%', maxWidth: '380px' }}>
             <p style={{ color: '#8892b0', fontSize: '0.9rem', marginBottom: '1.25rem', textAlign: 'center', fontWeight: 500 }}>โหมดจำลองการสแกนใบหน้า</p>

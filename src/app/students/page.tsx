@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useToast } from '@/components/Toast';
 
 interface Student {
@@ -52,6 +52,69 @@ export default function StudentsPage() {
   const [formData, setFormData] = useState({ name: '', nickname: '', class: 'ม.1/1', gender: 'male' });
   const [viewStudent, setViewStudent] = useState<Student | null>(null);
   const [studentToDelete, setStudentToDelete] = useState<Student | null>(null);
+  
+  // Face Registration
+  const [registeringStudent, setRegisteringStudent] = useState<Student | null>(null);
+  const [faceModelsLoaded, setFaceModelsLoaded] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const faceapiRef = useRef<any>(null);
+
+  useEffect(() => {
+    if (registeringStudent) {
+      const loadModels = async () => {
+        try {
+          const faceapi = await import('face-api.js');
+          faceapiRef.current = faceapi;
+          await Promise.all([
+            faceapi.nets.tinyFaceDetector.loadFromUri('/models'),
+            faceapi.nets.faceLandmark68Net.loadFromUri('/models'),
+            faceapi.nets.faceRecognitionNet.loadFromUri('/models')
+          ]);
+          setFaceModelsLoaded(true);
+        } catch(e) { console.error(e); }
+      };
+      if (!faceapiRef.current) loadModels();
+
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })
+        .then(stream => {
+          streamRef.current = stream;
+          if (videoRef.current) videoRef.current.srcObject = stream;
+        })
+        .catch(err => {
+          showToast("ไม่สามารถเปิดกล้องได้: " + err.message, "error");
+        });
+    } else {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(t => t.stop());
+        streamRef.current = null;
+      }
+    }
+  }, [registeringStudent]);
+
+  const handleCaptureFace = async () => {
+    if (!videoRef.current || !faceapiRef.current || !registeringStudent) return;
+    const faceapi = faceapiRef.current;
+    
+    showToast("กำลังประมวลผลใบหน้า...", "info");
+    const detection = await faceapi.detectSingleFace(videoRef.current, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
+    
+    if (detection) {
+      const savedFacesStr = localStorage.getItem('registeredFaces');
+      const savedFaces = savedFacesStr ? JSON.parse(savedFacesStr) : {};
+      
+      savedFaces[registeringStudent.id] = {
+        name: registeringStudent.name,
+        descriptor: Array.from(detection.descriptor)
+      };
+      
+      localStorage.setItem('registeredFaces', JSON.stringify(savedFaces));
+      showToast(`ลงทะเบียนใบหน้าของ ${registeringStudent.name} สำเร็จ!`, "success");
+      setRegisteringStudent(null);
+    } else {
+      showToast("ไม่พบใบหน้า กรุณามองที่กล้องให้ชัดเจน", "warning");
+    }
+  };
   
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
@@ -268,6 +331,9 @@ export default function StudentsPage() {
                 <td data-label="สถานะวันนี้">{statusBadge(student.status)}</td>
                 <td data-label="จัดการ" style={{ textAlign: 'center' }}>
                   <div style={{ display: 'flex', gap: '0.25rem', justifyContent: 'center' }}>
+                    <button className="btn-icon" aria-label="Register Face" title="ลงทะเบียนใบหน้า" style={{ padding: '0.35rem', color: '#1976d2' }} onClick={() => setRegisteringStudent(student)}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+                    </button>
                     <button className="btn-icon" aria-label="View" title="ดูรายละเอียด" style={{ padding: '0.35rem' }} onClick={() => handleViewClick(student)}>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
                     </button>
@@ -430,6 +496,34 @@ export default function StudentsPage() {
             <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
               <button className="btn-secondary" onClick={() => setStudentToDelete(null)} style={{ flex: 1 }}>ยกเลิก</button>
               <button className="btn-primary" onClick={confirmDelete} style={{ flex: 1, background: '#d32f2f', boxShadow: '0 4px 12px rgba(211, 47, 47, 0.2)' }}>ลบข้อมูล</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========== REGISTER FACE MODAL ========== */}
+      {registeringStudent && (
+        <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setRegisteringStudent(null); }}>
+          <div className="modal-content" style={{ maxWidth: '450px', textAlign: 'center' }}>
+            <div className="modal-header">
+              <h2>ลงทะเบียนใบหน้า</h2>
+              <button className="modal-close" onClick={() => setRegisteringStudent(null)}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+              </button>
+            </div>
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', padding: '1rem' }}>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem' }}>
+                กำลังลงทะเบียนใบหน้าสำหรับ <b>{registeringStudent.name}</b>
+              </p>
+              <div style={{ position: 'relative', width: '280px', height: '280px', borderRadius: '50%', overflow: 'hidden', border: '4px solid #4caf50', boxShadow: '0 8px 24px rgba(76, 175, 80, 0.2)' }}>
+                <video ref={videoRef} autoPlay playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' }} />
+              </div>
+              <p style={{ fontSize: '0.8rem', color: '#f57c00' }}>กรุณามองตรงมาที่กล้องและอยู่ในที่ที่มีแสงสว่างเพียงพอ</p>
+            </div>
+            <div className="modal-footer" style={{ justifyContent: 'center' }}>
+              <button className="btn-primary" onClick={handleCaptureFace} disabled={!faceModelsLoaded} style={{ width: '100%', padding: '0.8rem', fontSize: '1rem' }}>
+                {faceModelsLoaded ? '📸 ถ่ายภาพและบันทึก' : 'กำลังโหลดโมเดล AI...'}
+              </button>
             </div>
           </div>
         </div>

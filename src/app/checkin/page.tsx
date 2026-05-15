@@ -38,19 +38,6 @@ export default function CheckinPage() {
   const [isGettingLocation, setIsGettingLocation] = useState(false);
 
   const { showToast } = useToast();
-
-  // Gesture command before scan
-  const gestures = [
-    { id: 'peace',    emoji: '✌️', label: 'ชู 2 นิ้ว',   hint: 'กรุณาชู 2 นิ้ว ให้กล้องเห็นชัด' },
-    { id: 'thumbs',   emoji: '👍', label: 'โชว์นิ้วโป้ง', hint: 'กรุณายกนิ้วโป้งขึ้น' },
-    { id: 'wave',     emoji: '👋', label: 'โบกมือ',       hint: 'กรุณาโบกมือให้กล้องเห็น' },
-    { id: 'fist',     emoji: '✊', label: 'กำมือ',        hint: 'กรุณากำมือแล้วยกขึ้น' },
-    { id: 'openhand', emoji: '🖐️', label: 'แบมือ 5 นิ้ว', hint: 'กรุณาแบมือทั้ง 5 นิ้ว' },
-  ];
-  const [gestureId, setGestureId] = useState('peace');
-  const currentGesture = gestures.find(g => g.id === gestureId) || gestures[0];
-
-  // Sync scan state based on selected class
   useEffect(() => {
     const checkState = () => {
       try {
@@ -96,7 +83,6 @@ export default function CheckinPage() {
       // Remove room
       currentRooms = currentRooms.filter(r => (r.room || r) !== classFilter);
       setIsScanActive(false);
-      localStorage.removeItem('scanGesture');
       
       if (currentRooms.length > 0) {
         localStorage.setItem('activeScanRooms', JSON.stringify(currentRooms));
@@ -126,7 +112,6 @@ export default function CheckinPage() {
           }
           setIsScanActive(true);
           localStorage.setItem('activeScanRooms', JSON.stringify(currentRooms));
-          localStorage.setItem('scanGesture', gestureId);
         },
         (error) => {
           setIsGettingLocation(false);
@@ -317,33 +302,6 @@ export default function CheckinPage() {
             </svg>
           </label>
 
-          {/* Gesture chip */}
-          <div style={{ position: 'relative' }}>
-            <select
-              value={gestureId}
-              onChange={(e) => setGestureId(e.target.value)}
-              disabled={isScanActive}
-              style={{
-                appearance: 'none', WebkitAppearance: 'none',
-                display: 'flex', alignItems: 'center',
-                padding: '0.45rem 2rem 0.45rem 0.9rem',
-                background: isScanActive ? 'rgba(255,255,255,0.12)' : 'rgba(232,245,233,0.9)',
-                border: isScanActive ? '1px solid rgba(255,255,255,0.2)' : '1px solid rgba(129,199,132,0.4)',
-                borderRadius: '14px', cursor: isScanActive ? 'default' : 'pointer',
-                fontSize: '0.85rem', fontWeight: 600, fontFamily: 'inherit',
-                color: isScanActive ? 'white' : '#2e7d32',
-                transition: 'all 0.3s ease', outline: 'none',
-              }}
-            >
-              {gestures.map(g => (
-                <option key={g.id} value={g.id} style={{ color: '#1b5e20', background: 'white' }}>
-                  {g.emoji} {g.label}
-                </option>
-              ))}
-            </select>
-            <svg style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={isScanActive ? 'rgba(255,255,255,0.6)' : '#81c784'} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-          </div>
-
           {/* Radius chip */}
           <div style={{
             display: 'flex', alignItems: 'center', gap: '7px',
@@ -435,58 +393,6 @@ export default function CheckinPage() {
       </div>
 
 
-      {/* ── Animated Gesture Instruction Card (shown when scan is active) ── */}
-      {isScanActive && (
-        <div style={{
-          background: 'linear-gradient(135deg, rgba(27,94,32,0.06) 0%, rgba(76,175,80,0.1) 100%)',
-          border: '2px dashed rgba(76,175,80,0.4)',
-          borderRadius: '24px',
-          padding: '1.5rem',
-          marginBottom: '1.25rem',
-          textAlign: 'center',
-          animation: 'fadeUp 0.5s ease-out backwards',
-        }}>
-          <p style={{ fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#81c784', marginBottom: '0.75rem' }}>
-            🎯 ท่าทางที่นักเรียนต้องทำก่อนสแกน
-          </p>
-
-          {/* Big animated emoji */}
-          <div style={{ fontSize: '4rem', lineHeight: 1, marginBottom: '0.75rem', display: 'inline-block', animation: 'gestureWave 1.6s ease-in-out infinite' }}>
-            {currentGesture.emoji}
-          </div>
-
-          <h3 style={{ fontSize: '1.3rem', fontWeight: 800, color: '#1b5e20', marginBottom: '0.4rem', letterSpacing: '-0.01em' }}>
-            {currentGesture.label}
-          </h3>
-          <p style={{ fontSize: '0.9rem', color: '#4caf50', fontWeight: 500 }}>
-            {currentGesture.hint}
-          </p>
-
-          {/* Animated pulsing ring */}
-          <div style={{ display: 'flex', justifyContent: 'center', marginTop: '1rem', gap: '6px' }}>
-            {[0,1,2].map(i => (
-              <div key={i} style={{
-                width: '8px', height: '8px', borderRadius: '50%',
-                background: '#4caf50',
-                animation: `bounceDot 1.2s ease-in-out ${i * 0.2}s infinite`,
-              }} />
-            ))}
-          </div>
-
-          <style dangerouslySetInnerHTML={{__html: `
-            @keyframes gestureWave {
-              0%, 100% { transform: rotate(-8deg) scale(1); }
-              25% { transform: rotate(8deg) scale(1.12); }
-              50% { transform: rotate(-4deg) scale(1.05); }
-              75% { transform: rotate(6deg) scale(1.1); }
-            }
-            @keyframes bounceDot {
-              0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
-              40% { transform: translateY(-8px); opacity: 1; }
-            }
-          `}} />
-        </div>
-      )}
 
       {/* Quick Stats */}
       <div className="dashboard-grid" style={{ marginBottom: '2rem', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
