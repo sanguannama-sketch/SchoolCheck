@@ -211,6 +211,14 @@ export default function FaceScanPage() {
               
               // === REAL-TIME SYNC ===
               if (finalId) {
+                // 1. Update Backend Database
+                fetch(`http://localhost:5000/api/students/${finalId}`, {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ status: 'present' })
+                }).catch(err => console.error("Failed to sync check-in to database:", err));
+
+                // 2. Update LocalStorage for instant UI feedback on Checkin page
                 const studentsDataStr = localStorage.getItem('studentsData');
                 if (studentsDataStr) {
                   let studentsData = JSON.parse(studentsDataStr);

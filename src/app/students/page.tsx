@@ -43,6 +43,19 @@ const initialStudents: Student[] = [
 
 export default function StudentsPage() {
   const { showToast } = useToast();
+  const API_URL = 'http://localhost:5000/api/students';
+
+  const fetchStudents = async () => {
+    try {
+      const res = await fetch(API_URL);
+      const data = await res.json();
+      setStudents(data);
+      localStorage.setItem('studentsData', JSON.stringify(data));
+      window.dispatchEvent(new Event('studentsDataChanged'));
+    } catch (error) {
+      console.error("Error fetching students:", error);
+    }
+  };
   const [students, setStudents] = useState<Student[]>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('studentsData');
@@ -51,6 +64,11 @@ export default function StudentsPage() {
     }
     return initialStudents;
   });
+
+  // Load from API on mount
+  useEffect(() => {
+    fetchStudents();
+  }, []);
 
   // Sync state across tabs & internal events
   useEffect(() => {
@@ -134,17 +152,30 @@ export default function StudentsPage() {
     const detection = await faceapi.detectSingleFace(videoRef.current, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
     
     if (detection) {
-      const savedFacesStr = localStorage.getItem('registeredFaces');
-      const savedFaces = savedFacesStr ? JSON.parse(savedFacesStr) : {};
-      
-      savedFaces[registeringStudent.id] = {
-        name: registeringStudent.name,
-        descriptor: Array.from(detection.descriptor)
-      };
-      
-      localStorage.setItem('registeredFaces', JSON.stringify(savedFaces));
-      showToast(`ลงทะเบียนใบหน้าของ ${registeringStudent.name} สำเร็จ!`, "success");
-      setRegisteringStudent(null);
+      try {
+        const descriptorArray = Array.from(detection.descriptor);
+        
+        // 1. Save to Database
+        await fetch(`${API_URL}/${registeringStudent.id}/face`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ descriptor: descriptorArray })
+        });
+        
+        // 2. Also save to localStorage to keep scan page working smoothly
+        const savedFacesStr = localStorage.getItem('registeredFaces');
+        const savedFaces = savedFacesStr ? JSON.parse(savedFacesStr) : {};
+        savedFaces[registeringStudent.id] = {
+          name: registeringStudent.name,
+          descriptor: descriptorArray
+        };
+        localStorage.setItem('registeredFaces', JSON.stringify(savedFaces));
+        
+        showToast(`ลงทะเบียนใบหน้าของ ${registeringStudent.name} สำเร็จ!`, "success");
+        setRegisteringStudent(null);
+      } catch (e) {
+        showToast('เกิดข้อผิดพลาดในการเซฟใบหน้าลงฐานข้อมูล', 'error');
+      }
     } else {
       showToast("ไม่พบใบหน้า กรุณามองที่กล้องให้ชัดเจน", "warning");
     }
@@ -170,15 +201,24 @@ export default function StudentsPage() {
   const totalAbsent = students.filter(s => s.status === 'absent').length;
   const totalLate = students.filter(s => s.status === 'late').length;
 
-  const handleSaveStudent = () => {
+  const handleSaveStudent = async () => {
     if (!formData.name.trim()) return;
 
     if (editingId) {
-      updateStudents(prev => prev.map(s => s.id === editingId ? { ...s, name: formData.name, nickname: formData.nickname || formData.name.charAt(0), class: formData.class, gender: formData.gender } : s));
-      showToast('อัปเดตข้อมูลนักเรียนเรียบร้อยแล้ว', 'success');
+      try {
+        await fetch(`${API_URL}/${editingId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: formData.name, nickname: formData.nickname || formData.name.charAt(0), class: formData.class, gender: formData.gender })
+        });
+        await fetchStudents();
+        showToast('อัปเดตข้อมูลนักเรียนเรียบร้อยแล้ว', 'success');
+      } catch (e) {
+        showToast('เกิดข้อผิดพลาดในการอัปเดตข้อมูล', 'error');
+      }
     } else {
       const randomColor = avatarColors[students.length % avatarColors.length];
-      const newStudent: Student = {
+      const newStudent = {
         id: students.length > 0 ? Math.max(...students.map(s => s.id)) + 1 : 1,
         name: formData.name,
         nickname: formData.nickname || formData.name.charAt(0),
@@ -189,8 +229,18 @@ export default function StudentsPage() {
         avatarColor: randomColor.bg,
         iconColor: randomColor.color,
       };
-      updateStudents(prev => [...prev, newStudent]);
-      showToast('เพิ่มนักเรียนใหม่เรียบร้อยแล้ว', 'success');
+      
+      try {
+        await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newStudent)
+        });
+        await fetchStudents();
+        showToast('เพิ่มนักเรียนใหม่เรียบร้อยแล้ว', 'success');
+      } catch (e) {
+        showToast('เกิดข้อผิดพลาดในการเพิ่มนักเรียน', 'error');
+      }
     }
 
     setFormData({ name: '', nickname: '', class: 'ม.1/1', gender: 'male' });
@@ -208,10 +258,15 @@ export default function StudentsPage() {
     setStudentToDelete(student);
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (studentToDelete) {
-      updateStudents(prev => prev.filter(s => s.id !== studentToDelete.id));
-      showToast(`ลบข้อมูล ${studentToDelete.name} เรียบร้อยแล้ว`, 'info');
+      try {
+        await fetch(`${API_URL}/${studentToDelete.id}`, { method: 'DELETE' });
+        await fetchStudents();
+        showToast(`ลบข้อมูล ${studentToDelete.name} เรียบร้อยแล้ว`, 'info');
+      } catch (e) {
+        showToast('เกิดข้อผิดพลาดในการลบข้อมูล', 'error');
+      }
       setStudentToDelete(null);
     }
   };
