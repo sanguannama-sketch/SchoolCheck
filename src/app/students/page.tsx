@@ -43,7 +43,41 @@ const initialStudents: Student[] = [
 
 export default function StudentsPage() {
   const { showToast } = useToast();
-  const [students, setStudents] = useState<Student[]>(initialStudents);
+  const [students, setStudents] = useState<Student[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('studentsData');
+      if (saved) return JSON.parse(saved);
+      localStorage.setItem('studentsData', JSON.stringify(initialStudents));
+    }
+    return initialStudents;
+  });
+
+  // Sync state across tabs & internal events
+  useEffect(() => {
+    const handleStorage = (e: StorageEvent | Event) => {
+      if (e instanceof StorageEvent && e.key === 'studentsData' && e.newValue) {
+        setStudents(JSON.parse(e.newValue));
+      } else if (e.type === 'studentsDataChanged') {
+        const saved = localStorage.getItem('studentsData');
+        if (saved) setStudents(JSON.parse(saved));
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    window.addEventListener('studentsDataChanged', handleStorage);
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('studentsDataChanged', handleStorage);
+    };
+  }, []);
+
+  const updateStudents = (updater: (prev: Student[]) => Student[]) => {
+    setStudents(prev => {
+      const newStudents = updater(prev);
+      localStorage.setItem('studentsData', JSON.stringify(newStudents));
+      window.dispatchEvent(new Event('studentsDataChanged'));
+      return newStudents;
+    });
+  };
   const [searchTerm, setSearchTerm] = useState('');
   const [classFilter, setClassFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -140,7 +174,7 @@ export default function StudentsPage() {
     if (!formData.name.trim()) return;
 
     if (editingId) {
-      setStudents(students.map(s => s.id === editingId ? { ...s, name: formData.name, nickname: formData.nickname || formData.name.charAt(0), class: formData.class, gender: formData.gender } : s));
+      updateStudents(prev => prev.map(s => s.id === editingId ? { ...s, name: formData.name, nickname: formData.nickname || formData.name.charAt(0), class: formData.class, gender: formData.gender } : s));
       showToast('อัปเดตข้อมูลนักเรียนเรียบร้อยแล้ว', 'success');
     } else {
       const randomColor = avatarColors[students.length % avatarColors.length];
@@ -155,7 +189,7 @@ export default function StudentsPage() {
         avatarColor: randomColor.bg,
         iconColor: randomColor.color,
       };
-      setStudents([...students, newStudent]);
+      updateStudents(prev => [...prev, newStudent]);
       showToast('เพิ่มนักเรียนใหม่เรียบร้อยแล้ว', 'success');
     }
 
@@ -176,7 +210,7 @@ export default function StudentsPage() {
 
   const confirmDelete = () => {
     if (studentToDelete) {
-      setStudents(students.filter(s => s.id !== studentToDelete.id));
+      updateStudents(prev => prev.filter(s => s.id !== studentToDelete.id));
       showToast(`ลบข้อมูล ${studentToDelete.name} เรียบร้อยแล้ว`, 'info');
       setStudentToDelete(null);
     }

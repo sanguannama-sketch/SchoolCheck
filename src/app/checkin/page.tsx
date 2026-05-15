@@ -31,7 +31,42 @@ const initialStudents: Student[] = [
 ];
 
 export default function CheckinPage() {
-  const [students, setStudents] = useState<Student[]>(initialStudents);
+  const [students, setStudents] = useState<Student[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('studentsData');
+      if (saved) return JSON.parse(saved);
+      localStorage.setItem('studentsData', JSON.stringify(initialStudents));
+    }
+    return initialStudents;
+  });
+
+  // Sync state across tabs & internal events
+  useEffect(() => {
+    const handleStorage = (e: StorageEvent | Event) => {
+      if (e instanceof StorageEvent && e.key === 'studentsData' && e.newValue) {
+        setStudents(JSON.parse(e.newValue));
+      } else if (e.type === 'studentsDataChanged') {
+        const saved = localStorage.getItem('studentsData');
+        if (saved) setStudents(JSON.parse(saved));
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    window.addEventListener('studentsDataChanged', handleStorage);
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('studentsDataChanged', handleStorage);
+    };
+  }, []);
+
+  const updateStudents = (updater: (prev: Student[]) => Student[]) => {
+    setStudents(prev => {
+      const newStudents = updater(prev);
+      localStorage.setItem('studentsData', JSON.stringify(newStudents));
+      // Dispatch a custom event for same-tab updates (optional, but good practice)
+      window.dispatchEvent(new Event('studentsDataChanged'));
+      return newStudents;
+    });
+  };
   const [classFilter, setClassFilter] = useState('ม.1/1');
   const [isScanActive, setIsScanActive] = useState(false);
   const [allowedDistance, setAllowedDistance] = useState<number>(100);
@@ -144,11 +179,11 @@ export default function CheckinPage() {
   const classes = Array.from(new Set(students.map(s => s.class)));
 
   const handleStatusChange = (studentId: number, newStatus: 'present' | 'absent' | 'late') => {
-    setStudents(prev => prev.map(s => s.id === studentId ? { ...s, status: newStatus } : s));
+    updateStudents(prev => prev.map(s => s.id === studentId ? { ...s, status: newStatus } : s));
   };
   
   const handleMarkAllPresent = () => {
-    setStudents(prev => prev.map(s => {
+    updateStudents(prev => prev.map(s => {
       if (s.class === classFilter) {
         return { ...s, status: 'present' };
       }

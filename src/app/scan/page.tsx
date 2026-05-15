@@ -185,6 +185,7 @@ export default function FaceScanPage() {
             // Search in registered faces
             const savedFacesStr = localStorage.getItem('registeredFaces');
             let finalName = null;
+            let finalId = null;
             if (savedFacesStr) {
               const savedFaces = JSON.parse(savedFacesStr);
               let bestMatch = { id: null as string | null, name: null as string | null, distance: 1.0 };
@@ -200,12 +201,27 @@ export default function FaceScanPage() {
               if (bestMatch.distance < 0.55 && bestMatch.name) {
                  console.log("Matched face:", bestMatch.name, "with distance:", bestMatch.distance);
                  finalName = bestMatch.name;
+                 finalId = bestMatch.id;
               }
             }
 
             if (finalName) {
               console.log("Real face recognized!");
               setIsScanning(false);
+              
+              // === REAL-TIME SYNC ===
+              if (finalId) {
+                const studentsDataStr = localStorage.getItem('studentsData');
+                if (studentsDataStr) {
+                  let studentsData = JSON.parse(studentsDataStr);
+                  studentsData = studentsData.map((s: any) => 
+                    s.id.toString() === finalId ? { ...s, status: 'present' } : s
+                  );
+                  localStorage.setItem('studentsData', JSON.stringify(studentsData));
+                  window.dispatchEvent(new Event('studentsDataChanged')); // Fire event for same-tab listeners
+                }
+              }
+
               executeSimulatedScan(true, finalName);
             }
           }
