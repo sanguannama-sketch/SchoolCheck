@@ -67,6 +67,13 @@ export default function CheckinPage() {
   const [isScanActive, setIsScanActive] = useState(false);
   const [allowedDistance, setAllowedDistance] = useState<number>(100);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
+  // New settings
+  const [subject, setSubject] = useState('คณิตศาสตร์');
+  const [presentStart, setPresentStart] = useState('07:30');
+  const [presentEnd, setPresentEnd] = useState('08:00');
+  const [lateStart, setLateStart] = useState('08:01');
+  const [lateEnd, setLateEnd] = useState('08:30');
+  const [absentAfter, setAbsentAfter] = useState('08:31'); // หลังเวลานี้ = ขาดเรียน
 
   const { showToast } = useToast();
   useEffect(() => {
@@ -143,6 +150,10 @@ export default function CheckinPage() {
           }
           setIsScanActive(true);
           localStorage.setItem('activeScanRooms', JSON.stringify(currentRooms));
+          // Save scan session config for scan page to use
+          localStorage.setItem('scanConfig', JSON.stringify({
+            subject, presentStart, presentEnd, lateStart, lateEnd, absentAfter
+          }));
         },
         (error) => {
           setIsGettingLocation(false);
@@ -177,8 +188,9 @@ export default function CheckinPage() {
   const ATTENDANCE_URL = 'http://localhost:5000/api/attendance';
 
   const recordAttendance = async (student: any, status: string, method = 'manual') => {
-    const today = new Date().toISOString().split('T')[0]; // "2026-05-15"
+    const today = new Date().toISOString().split('T')[0];
     const time = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const config = (() => { try { return JSON.parse(localStorage.getItem('scanConfig') || '{}'); } catch { return {}; } })();
     try {
       await fetch(ATTENDANCE_URL, {
         method: 'POST',
@@ -188,6 +200,7 @@ export default function CheckinPage() {
           studentId: student.id,
           studentName: student.name,
           class: student.class,
+          subject: config.subject || subject,
           status,
           checkinTime: time,
           method
@@ -197,6 +210,32 @@ export default function CheckinPage() {
       console.error('Failed to record attendance:', e);
     }
   };
+
+  // Auto-mark absent when absentAfter time is reached
+  useEffect(() => {
+    if (!isScanActive) return;
+    const checkAutoAbsent = () => {
+      const now = new Date();
+      const hhmm = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+      if (hhmm >= absentAfter) {
+        const today = now.toISOString().split('T')[0];
+        fetch('http://localhost:5000/api/attendance/auto-absent', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ date: today, class: classFilter, subject })
+        }).then(r => r.json()).then(data => {
+          if (data.marked > 0) {
+            showToast(`บันทึกขาดเรียน ${data.marked} คน อัตโนมัติ`, 'warning');
+            fetchStudents();
+          }
+        }).catch(() => {});
+        clearInterval(absentTimer);
+      }
+    };
+    const absentTimer = setInterval(checkAutoAbsent, 30000); // ตรวจทุก 30 วินาที
+    checkAutoAbsent(); // ตรวจทันที
+    return () => clearInterval(absentTimer);
+  }, [isScanActive, absentAfter, classFilter, subject]);
 
   const handleStatusChange = async (studentId: number, newStatus: 'present' | 'absent' | 'late') => {
     const student = students.find(s => s.id === studentId);
@@ -415,7 +454,85 @@ export default function CheckinPage() {
 
         </div>
 
-        {/* Scan toggle button */}
+        {/* ─── NEW: Subject + Time config chips ─── */}
+        <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', marginBottom: '1.1rem' }}>
+
+          {/* Subject chip */}
+          <label style={{
+            display: 'flex', alignItems: 'center', gap: '7px',
+            padding: '0.45rem 0.9rem',
+            background: isScanActive ? 'rgba(255,255,255,0.12)' : 'rgba(232,245,233,0.9)',
+            border: isScanActive ? '1px solid rgba(255,255,255,0.2)' : '1px solid rgba(129,199,132,0.4)',
+            borderRadius: '14px', cursor: 'pointer', flex: '1 1 140px',
+          }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={isScanActive ? 'rgba(255,255,255,0.8)' : '#4caf50'} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+            </svg>
+            <input
+              type="text"
+              value={subject}
+              onChange={e => setSubject(e.target.value)}
+              disabled={isScanActive}
+              placeholder="รายวิชา"
+              style={{
+                border: 'none', outline: 'none', background: 'transparent',
+                fontSize: '0.85rem', fontWeight: 600, fontFamily: 'inherit',
+                color: isScanActive ? 'white' : '#2e7d32',
+                width: '100px',
+              }}
+            />
+          </label>
+
+          {/* Present time chip */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '6px',
+            padding: '0.45rem 0.9rem',
+            background: isScanActive ? 'rgba(255,255,255,0.12)' : 'rgba(232,245,233,0.9)',
+            border: isScanActive ? '1px solid rgba(255,255,255,0.2)' : '1px solid rgba(129,199,132,0.4)',
+            borderRadius: '14px', flex: '1 1 200px',
+          }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={isScanActive ? 'rgba(255,255,255,0.8)' : '#4caf50'} strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: isScanActive ? 'rgba(255,255,255,0.7)' : '#388e3c' }}>มาเรียน</span>
+            <input type="time" value={presentStart} onChange={e => setPresentStart(e.target.value)} disabled={isScanActive}
+              style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: '0.82rem', fontWeight: 600, color: isScanActive ? 'white' : '#2e7d32', cursor: 'pointer', fontFamily: 'inherit' }} />
+            <span style={{ color: isScanActive ? 'rgba(255,255,255,0.5)' : '#81c784', fontSize: '0.8rem' }}>–</span>
+            <input type="time" value={presentEnd} onChange={e => setPresentEnd(e.target.value)} disabled={isScanActive}
+              style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: '0.82rem', fontWeight: 600, color: isScanActive ? 'white' : '#2e7d32', cursor: 'pointer', fontFamily: 'inherit' }} />
+          </div>
+
+          {/* Late time chip */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '6px',
+            padding: '0.45rem 0.9rem',
+            background: isScanActive ? 'rgba(255,255,255,0.12)' : 'rgba(255,248,225,0.9)',
+            border: isScanActive ? '1px solid rgba(255,255,255,0.2)' : '1px solid rgba(255,193,7,0.4)',
+            borderRadius: '14px', flex: '1 1 200px',
+          }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={isScanActive ? 'rgba(255,255,255,0.8)' : '#f9a825'} strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: isScanActive ? 'rgba(255,255,255,0.7)' : '#f57f17' }}>มาสาย</span>
+            <input type="time" value={lateStart} onChange={e => setLateStart(e.target.value)} disabled={isScanActive}
+              style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: '0.82rem', fontWeight: 600, color: isScanActive ? 'white' : '#e65100', cursor: 'pointer', fontFamily: 'inherit' }} />
+            <span style={{ color: isScanActive ? 'rgba(255,255,255,0.5)' : '#ffcc02', fontSize: '0.8rem' }}>–</span>
+            <input type="time" value={lateEnd} onChange={e => setLateEnd(e.target.value)} disabled={isScanActive}
+              style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: '0.82rem', fontWeight: 600, color: isScanActive ? 'white' : '#e65100', cursor: 'pointer', fontFamily: 'inherit' }} />
+          </div>
+
+          {/* Absent after chip */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '6px',
+            padding: '0.45rem 0.9rem',
+            background: isScanActive ? 'rgba(255,255,255,0.12)' : 'rgba(255,235,238,0.9)',
+            border: isScanActive ? '1px solid rgba(255,255,255,0.2)' : '1px solid rgba(239,83,80,0.35)',
+            borderRadius: '14px', flex: '1 1 160px',
+          }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={isScanActive ? 'rgba(255,255,255,0.8)' : '#e53935'} strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: isScanActive ? 'rgba(255,255,255,0.7)' : '#c62828', whiteSpace: 'nowrap' }}>ขาดหลัง</span>
+            <input type="time" value={absentAfter} onChange={e => setAbsentAfter(e.target.value)} disabled={isScanActive}
+              style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: '0.82rem', fontWeight: 600, color: isScanActive ? 'white' : '#c62828', cursor: 'pointer', fontFamily: 'inherit' }} />
+          </div>
+
+        </div>
+
         <button
           onClick={toggleScan}
           disabled={isGettingLocation}

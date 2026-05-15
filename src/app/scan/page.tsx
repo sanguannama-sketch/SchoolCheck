@@ -143,22 +143,44 @@ export default function FaceScanPage() {
   }, []);
 
 
-  const executeSimulatedScan = (forceSuccess = false, matchedName?: string) => {
-    const isLate = forceSuccess ? false : Math.random() > 0.7; // 30% chance of being marked late
+  const getStatusFromTime = (): 'success' | 'late' | 'unknown' | 'absent' => {
+    try {
+      const configStr = localStorage.getItem('scanConfig');
+      if (!configStr) return 'success';
+      const config = JSON.parse(configStr);
+      const now = new Date();
+      const hhmm = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+      if (config.absentAfter && hhmm >= config.absentAfter) return 'absent';
+      if (hhmm >= config.presentStart && hhmm <= config.presentEnd) return 'success';
+      if (hhmm >= config.lateStart && hhmm <= config.lateEnd) return 'late';
+      return 'unknown';
+    } catch {
+      return 'success';
+    }
+  };
+
+  const executeSimulatedScan = (forceSuccess = false, matchedName?: string, forceStatus?: 'success' | 'late' | 'unknown' | 'absent') => {
+    const timeStatus = forceStatus ?? getStatusFromTime();
+    const isLate = forceSuccess ? timeStatus === 'late' : Math.random() > 0.7;
     const fallbackName = forceSuccess ? 'ผู้ใช้งานทั่วไป' : (isLate ? 'เด็กชาย มาสาย ปกติ' : 'เด็กหญิง ตั้งใจ เรียนดี');
     const finalName = matchedName || (manualName.trim() !== '' ? manualName : fallbackName);
-    
+    // Map to ScanLog status (ScanLog only has success|late|unknown)
+    const scanStatus: 'success' | 'late' | 'unknown' =
+      timeStatus === 'absent' ? 'unknown' :
+      forceSuccess ? (timeStatus === 'success' ? 'success' : timeStatus === 'late' ? 'late' : 'unknown') :
+      (isLate ? 'late' : 'success');
+
     const mockStudent: ScanLog = {
       id: Math.random().toString(36).substring(7),
       name: finalName,
       time: new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-      status: isLate ? 'late' : 'success',
+      status: scanStatus,
       avatar: finalName.charAt(0),
     };
     
     setLastScanned(mockStudent);
-    setLogs(prev => [mockStudent, ...prev].slice(0, 5)); // Keep last 5 scans
-    setManualName(""); // Reset input field
+    setLogs(prev => [mockStudent, ...prev].slice(0, 5));
+    setManualName("");
     
     // Resume scanning after 3 seconds
     setTimeout(() => {
@@ -247,32 +269,38 @@ export default function FaceScanPage() {
     const { name, id, class: cls } = pendingMatch;
     const today = new Date().toISOString().split('T')[0];
     const time = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const timeStatus = getStatusFromTime();
+    // Map to DB status
+    const dbStatus: 'present' | 'absent' | 'late' =
+      timeStatus === 'success' ? 'present' :
+      timeStatus === 'late'    ? 'late' :
+      timeStatus === 'absent'  ? 'absent' : 'absent';
 
     // 1. Update Student status in DB
     fetch(`http://localhost:5000/api/students/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'present' })
+      body: JSON.stringify({ status: dbStatus })
     }).catch(err => console.error('Failed to update student:', err));
 
     // 2. Record Attendance
     fetch('http://localhost:5000/api/attendance', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ date: today, studentId: parseInt(id), studentName: name, class: cls, status: 'present', checkinTime: time, method: 'face' })
+      body: JSON.stringify({ date: today, studentId: parseInt(id), studentName: name, class: cls, status: dbStatus, checkinTime: time, method: 'face' })
     }).catch(err => console.error('Failed to record attendance:', err));
 
     // 3. Update LocalStorage for real-time checkin page sync
     const studentsDataStr = localStorage.getItem('studentsData');
     if (studentsDataStr) {
       let studentsData = JSON.parse(studentsDataStr);
-      studentsData = studentsData.map((s: any) => s.id.toString() === id ? { ...s, status: 'present' } : s);
+      studentsData = studentsData.map((s: any) => s.id.toString() === id ? { ...s, status: dbStatus } : s);
       localStorage.setItem('studentsData', JSON.stringify(studentsData));
       window.dispatchEvent(new Event('studentsDataChanged'));
     }
 
     setPendingMatch(null);
-    executeSimulatedScan(true, name);
+    executeSimulatedScan(true, name, timeStatus);
   };
 
   // Called when student presses "ไม่ใช่ฉัน" (Cancel) button

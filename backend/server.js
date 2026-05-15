@@ -105,15 +105,13 @@ app.put('/api/students/:id/face', async (req, res) => {
 // === Attendance APIs ===
 const Attendance = require('./models/Attendance');
 
-// POST: บันทึกการเช็คชื่อ (สร้างหรืออัปเดตถ้ามีแล้ว)
+// POST: บันทึกการเช็คชื่อ (upsert)
 app.post('/api/attendance', async (req, res) => {
   try {
-    const { date, studentId, studentName, class: cls, status, checkinTime, method } = req.body;
-    
-    // upsert: ถ้ามีแล้ว → อัปเดต, ถ้าไม่มี → สร้างใหม่
+    const { date, studentId, studentName, class: cls, subject, status, checkinTime, method } = req.body;
     const record = await Attendance.findOneAndUpdate(
       { date, studentId },
-      { date, studentId, studentName, class: cls, status, checkinTime, method },
+      { date, studentId, studentName, class: cls, subject: subject || '', status, checkinTime, method },
       { new: true, upsert: true }
     );
     res.status(201).json(record);
@@ -122,14 +120,13 @@ app.post('/api/attendance', async (req, res) => {
   }
 });
 
-// GET: ดึงประวัติตามวันที่ (เช่น /api/attendance?date=2026-05-15&class=ม.1/1)
+// GET: ดึงประวัติตามวันที่/ห้อง
 app.get('/api/attendance', async (req, res) => {
   try {
     const { date, class: cls } = req.query;
     const filter = {};
     if (date) filter.date = date;
     if (cls) filter.class = cls;
-    
     const records = await Attendance.find(filter).sort({ checkinTime: 1 });
     res.json(records);
   } catch (error) {
@@ -137,36 +134,87 @@ app.get('/api/attendance', async (req, res) => {
   }
 });
 
-// GET: ดึงประวัติรายนักเรียน (เช่น /api/attendance/student/5)
+// PUT: แก้ไขรายการ attendance ตาม _id
+app.put('/api/attendance/:id', async (req, res) => {
+  try {
+    const { status, subject, checkinTime } = req.body;
+    const updated = await Attendance.findByIdAndUpdate(
+      req.params.id,
+      { ...(status && { status }), ...(subject !== undefined && { subject }), ...(checkinTime && { checkinTime }) },
+      { new: true }
+    );
+    if (!updated) return res.status(404).json({ message: 'Not found' });
+    res.json(updated);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// DELETE: ลบรายการ attendance ตาม _id
+app.delete('/api/attendance/:id', async (req, res) => {
+  try {
+    await Attendance.findByIdAndDelete(req.params.id);
+    res.json({ message: 'Deleted' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// POST: Auto-mark ขาดเรียนสำหรับนักเรียนที่ยังไม่มีบันทึกวันนี้
+app.post('/api/attendance/auto-absent', async (req, res) => {
+  try {
+    const { date, class: cls, subject } = req.body;
+    // ดึงนักเรียนในห้อง
+    const students = await require('./models/Student').find({ class: cls });
+    // ดึง attendance ที่มีอยู่แล้วในวันนี้ของห้องนี้
+    const existing = await Attendance.find({ date, class: cls });
+    const existingIds = new Set(existing.map(r => r.studentId));
+    // กรองเฉพาะคนที่ยังไม่มีบันทึก
+    const absent = students.filter(s => !existingIds.has(s.id));
+    if (absent.length === 0) return res.json({ marked: 0 });
+    // สร้างบันทึกขาดเรียน
+    const time = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const ops = absent.map(s => ({
+      updateOne: {
+        filter: { date, studentId: s.id },
+        update: { date, studentId: s.id, studentName: s.name, class: cls, subject: subject || '', status: 'absent', checkinTime: time, method: 'auto' },
+        upsert: true
+      }
+    }));
+    await Attendance.bulkWrite(ops);
+    // อัปเดต Student status ด้วย
+    await require('./models/Student').updateMany({ id: { $in: absent.map(s => s.id) } }, { status: 'absent' });
+    res.json({ marked: absent.length, students: absent.map(s => s.name) });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// GET: ดึงประวัติรายนักเรียน
 app.get('/api/attendance/student/:studentId', async (req, res) => {
   try {
     const records = await Attendance.find({ studentId: req.params.studentId })
-      .sort({ date: -1 })
-      .limit(30); // แสดงย้อนหลัง 30 วัน
+      .sort({ date: -1 }).limit(30);
     res.json(records);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
 
-// GET: สรุปสถิติตามช่วงวันที่ (เช่น /api/attendance/summary?startDate=2026-05-01&endDate=2026-05-15)
+// GET: สรุปสถิติตามช่วงวันที่
 app.get('/api/attendance/summary', async (req, res) => {
   try {
     const { startDate, endDate, class: cls } = req.query;
     const filter = {};
     if (startDate && endDate) filter.date = { $gte: startDate, $lte: endDate };
     if (cls) filter.class = cls;
-
     const records = await Attendance.find(filter);
-
-    // จัดกลุ่มตามวันที่
     const summary = {};
     records.forEach(r => {
       if (!summary[r.date]) summary[r.date] = { date: r.date, present: 0, absent: 0, late: 0, total: 0 };
       summary[r.date][r.status]++;
       summary[r.date].total++;
     });
-
     res.json(Object.values(summary).sort((a, b) => b.date.localeCompare(a.date)));
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -177,3 +225,4 @@ app.get('/api/attendance/summary', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`🚀 Server is running on http://localhost:${PORT}`);
 });
+

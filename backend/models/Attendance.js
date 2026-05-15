@@ -2,22 +2,23 @@ const mongoose = require('mongoose');
 
 const attendanceSchema = new mongoose.Schema({
   date: { 
-    type: String,  // เก็บเป็น "YYYY-MM-DD" เช่น "2026-05-15"
+    type: String,
     required: true,
     index: true 
   },
   studentId: { type: Number, required: true },
   studentName: { type: String, required: true },
   class: { type: String, required: true },
+  subject: { type: String, default: '' },
   status: { 
     type: String, 
     enum: ['present', 'absent', 'late'], 
     required: true 
   },
-  checkinTime: { type: String }, // เวลาที่เช็คชื่อ เช่น "08:30:22"
+  checkinTime: { type: String },
   method: { 
     type: String, 
-    enum: ['face', 'manual'],  // face = สแกนใบหน้า, manual = ครูกดเอง
+    enum: ['face', 'manual', 'auto'],
     default: 'manual'
   }
 }, { timestamps: true });
