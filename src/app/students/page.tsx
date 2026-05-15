@@ -56,14 +56,12 @@ export default function StudentsPage() {
       console.error("Error fetching students:", error);
     }
   };
-  const [students, setStudents] = useState<Student[]>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('studentsData');
-      if (saved) return JSON.parse(saved);
-      localStorage.setItem('studentsData', JSON.stringify(initialStudents));
-    }
-    return initialStudents;
-  });
+  const [students, setStudents] = useState<Student[]>(initialStudents);
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   // Load from API on mount
   useEffect(() => {
@@ -290,6 +288,10 @@ export default function StudentsPage() {
   };
 
   const classes = Array.from(new Set(students.map(s => s.class)));
+
+  if (!isClient) {
+    return null; // Prevent hydration errors by waiting for client mount
+  }
 
   return (
     <div style={{ animation: "fadeUp 0.6s ease-out backwards" }}>

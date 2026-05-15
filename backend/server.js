@@ -46,13 +46,6 @@ const initialStudents = [
 app.get('/api/students', async (req, res) => {
   try {
     let students = await Student.find().sort({ class: 1, number: 1 });
-    
-    // ถ้าฐานข้อมูลว่างเปล่า ให้ใส่ข้อมูลตั้งต้น
-    if (students.length === 0) {
-      await Student.insertMany(initialStudents);
-      students = await Student.find().sort({ class: 1, number: 1 });
-    }
-    
     res.json(students);
   } catch (error) {
     res.status(500).json({ message: error.message });
